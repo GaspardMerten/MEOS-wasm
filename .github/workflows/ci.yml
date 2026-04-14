@@ -22,8 +22,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             cmake ninja-build autoconf automake libtool pkg-config \
-            python3-venv curl unzip firefox-esr tzdata
-          firefox --version || firefox-esr --version || true
+            python3-venv curl unzip tzdata
+
+      - name: Install Firefox
+        id: firefox
+        uses: browser-actions/setup-firefox@v1
+        with:
+          firefox-version: latest
 
       - name: Cache emsdk
         id: cache-emsdk
@@ -79,12 +84,12 @@ jobs:
 
       - name: Smoke test — acceptance suite
         env:
-          FIREFOX_BIN: /usr/bin/firefox-esr
+          FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
         run: /tmp/venv/bin/python test/browser_full.py
 
       - name: Coverage test — every MEOS function
         env:
-          FIREFOX_BIN: /usr/bin/firefox-esr
+          FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
         run: /tmp/venv/bin/python test/coverage.py --batch 300 --fail-threshold 0.20 --json /tmp/coverage.json
 
       - name: Upload build artifacts
