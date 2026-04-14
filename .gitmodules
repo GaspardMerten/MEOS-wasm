@@ -1,0 +1,3 @@
+[submodule "third_party/meos"]
+	path = third_party/meos
+	url = https://github.com/MobilityDB/MEOS.git

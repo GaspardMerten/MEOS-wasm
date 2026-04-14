@@ -1,0 +1,111 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout with submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build autoconf automake libtool pkg-config \
+            python3-venv curl unzip firefox-esr tzdata
+          firefox --version || firefox-esr --version || true
+
+      - name: Cache emsdk
+        id: cache-emsdk
+        uses: actions/cache@v4
+        with:
+          path: ~/emsdk
+          key: emsdk-${{ runner.os }}-5.0.5
+
+      - name: Install emsdk
+        if: steps.cache-emsdk.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git ~/emsdk
+          ~/emsdk/emsdk install 5.0.5
+          ~/emsdk/emsdk activate 5.0.5
+
+      - name: Cache MEOS dependency sysroot
+        id: cache-sysroot
+        uses: actions/cache@v4
+        with:
+          path: build/sysroot-wasm64
+          key: meos-deps-wasm64-${{ hashFiles('deps/versions.sh', 'deps/build-deps.sh') }}
+
+      - name: Build dependency sysroot (wasm64)
+        if: steps.cache-sysroot.outputs.cache-hit != 'true'
+        run: |
+          source ~/emsdk/emsdk_env.sh
+          ./deps/build-deps.sh
+
+      - name: Build meos-wasm
+        run: |
+          source ~/emsdk/emsdk_env.sh
+          ./scripts/build.sh
+
+      - name: Set up Python venv
+        run: |
+          python3 -m venv /tmp/venv
+          /tmp/venv/bin/pip install --quiet selenium
+
+      - name: Set up geckodriver
+        run: |
+          ver=$(curl -s https://api.github.com/repos/mozilla/geckodriver/releases/latest | grep tag_name | head -1 | cut -d'"' -f4)
+          curl -sL "https://github.com/mozilla/geckodriver/releases/download/${ver}/geckodriver-${ver}-linux64.tar.gz" | tar xz -C /tmp
+          sudo mv /tmp/geckodriver /usr/local/bin/
+          geckodriver --version
+
+      - name: Start web server
+        run: |
+          nohup python3 -m http.server 8765 --directory web > /tmp/server.log 2>&1 &
+          for i in {1..20}; do
+            curl -sI http://localhost:8765/meos.wasm >/dev/null && break
+            sleep 0.5
+          done
+
+      - name: Smoke test — acceptance suite
+        env:
+          FIREFOX_BIN: /usr/bin/firefox-esr
+        run: /tmp/venv/bin/python test/browser_full.py
+
+      - name: Coverage test — every MEOS function
+        env:
+          FIREFOX_BIN: /usr/bin/firefox-esr
+        run: /tmp/venv/bin/python test/coverage.py --batch 300 --fail-threshold 0.20 --json /tmp/coverage.json
+
+      - name: Upload build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: meos-wasm-web
+          path: |
+            web/meos.wasm
+            web/meos.js
+            web/meos.data
+            web/meos-api.js
+            web/meos-api.json
+            web/meos-api.d.ts
+            web/index.html
+          if-no-files-found: warn
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: meos-wasm-coverage
+          path: /tmp/coverage.json
+          if-no-files-found: warn

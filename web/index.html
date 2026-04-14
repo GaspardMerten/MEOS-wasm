@@ -1,0 +1,2341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MEOS · wasm64 — A Live Field of Moving Entities</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin></script>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..900,0..100&family=JetBrains+Mono:wght@300;400;500;600&family=Caveat:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0b1f3a;
+    --ink-2: #152c4d;
+    --ink-soft: #2a3d5c;
+    --ink-ghost: rgba(11, 31, 58, .55);
+    --paper: #f2ead8;
+    --paper-warm: #ece2cb;
+    --paper-shade: #e2d6b8;
+    --rule: #b8a97f;
+    --rule-soft: #d4c9a7;
+    --accent: #b83a1d;
+    --accent-soft: #e86341;
+    --accent-pale: rgba(184, 58, 29, .15);
+    --ok: #2f6b4b;
+    --gold: #b8860b;
+    --tick: #7a6a45;
+    --terminal-bg: #0e1d33;
+    --terminal-fg: #cbd6e2;
+    --terminal-accent: #ff8f63;
+    --terminal-ok: #6bb395;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: 'Fraunces', Georgia, serif;
+    color: var(--ink);
+    background: var(--paper);
+    background-image:
+      radial-gradient(circle at 15% 8%, rgba(184, 169, 127, .22), transparent 55%),
+      radial-gradient(circle at 85% 80%, rgba(11, 31, 58, .1), transparent 60%),
+      linear-gradient(var(--rule-soft) 1px, transparent 1px),
+      linear-gradient(90deg, var(--rule-soft) 1px, transparent 1px),
+      linear-gradient(var(--rule) 1px, transparent 1px),
+      linear-gradient(90deg, var(--rule) 1px, transparent 1px);
+    background-size:
+      100% 100%, 100% 100%,
+      24px 24px, 24px 24px,
+      120px 120px, 120px 120px;
+    min-height: 100vh;
+    position: relative;
+    overflow-x: hidden;
+  }
+  body::before {
+    content: "";
+    position: fixed; inset: 0; pointer-events: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .04  0 0 0 0 .12  0 0 0 0 .23  0 0 0 .16 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+    opacity: .5; mix-blend-mode: multiply; z-index: 1;
+  }
+  body::after {
+    content: ""; position: fixed; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse at center, transparent 45%, rgba(11, 31, 58, .22) 100%);
+    z-index: 2;
+  }
+  main { position: relative; z-index: 3; }
+
+  /* ── Header ───────────────────────────────────────────── */
+  header {
+    padding: 56px clamp(24px, 5vw, 80px) 28px;
+    display: grid;
+    grid-template-columns: 1.4fr auto;
+    gap: 32px;
+    align-items: end;
+    border-bottom: 1.5px solid var(--ink);
+    position: relative;
+  }
+  header::after {
+    content: ""; position: absolute;
+    left: clamp(24px, 5vw, 80px); right: clamp(24px, 5vw, 80px);
+    bottom: -6px; height: 1px; background: var(--ink); opacity: .4;
+  }
+  .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    letter-spacing: .22em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 16px;
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+  }
+  .eyebrow span { display: inline-flex; align-items: center; gap: 6px; }
+  .eyebrow .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 2px var(--paper), 0 0 0 3px var(--accent);
+    animation: blink 1.8s ease-in-out infinite;
+  }
+  @keyframes blink { 50% { opacity: .3; } }
+
+  h1 {
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-size: clamp(42px, 8.4vw, 124px);
+    line-height: .84;
+    letter-spacing: -0.035em;
+    margin: 0;
+    font-variation-settings: "opsz" 144, "SOFT" 30;
+  }
+  h1 .amp {
+    font-style: italic;
+    font-weight: 400;
+    color: var(--accent);
+    font-variation-settings: "opsz" 144, "SOFT" 100;
+  }
+  h1 sup {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .16em;
+    letter-spacing: .1em;
+    color: var(--ink-soft);
+    margin-left: .4em;
+    font-weight: 400;
+    position: relative;
+    top: -1.5em;
+    display: inline-block;
+  }
+  .subtitle {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-weight: 300;
+    font-size: clamp(16px, 1.5vw, 19px);
+    color: var(--ink-soft);
+    margin: 18px 0 0;
+    max-width: 60ch;
+    line-height: 1.45;
+    font-variation-settings: "opsz" 48;
+  }
+  .subtitle em { color: var(--accent); font-style: italic; }
+
+  .meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    line-height: 1.7;
+    text-align: right;
+    color: var(--ink-soft);
+    letter-spacing: .08em;
+    border-left: 1px solid var(--rule);
+    padding-left: 18px;
+    white-space: nowrap;
+  }
+  .meta b { color: var(--ink); font-weight: 600; }
+  .meta .key { color: var(--tick); }
+
+  /* ── HUD strip (live counters) ────────────────────────── */
+  .hud {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    border-bottom: 1.5px solid var(--ink);
+    background: var(--paper-warm);
+  }
+  .hud .cell {
+    padding: 14px 20px;
+    border-right: 1px solid var(--rule);
+    position: relative;
+  }
+  .hud .cell:last-child { border-right: none; }
+  .hud .k {
+    display: block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: .22em;
+    text-transform: uppercase;
+    color: var(--tick);
+    margin-bottom: 4px;
+  }
+  .hud .v {
+    font-family: 'Fraunces', serif;
+    font-weight: 400;
+    font-size: clamp(22px, 2.6vw, 34px);
+    color: var(--ink);
+    line-height: 1;
+    font-variation-settings: "opsz" 144, "SOFT" 40;
+    font-feature-settings: "tnum";
+  }
+  .hud .v.accent { color: var(--accent); font-style: italic; }
+  .hud .v small {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-style: normal;
+    color: var(--tick);
+    letter-spacing: .1em;
+    margin-left: 4px;
+  }
+
+  /* ── Instrument ───────────────────────────────────────── */
+  .instrument {
+    margin: 0;
+    border-bottom: 1.5px solid var(--ink);
+    background: var(--paper-warm);
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(360px, 1fr);
+    position: relative;
+  }
+
+  /* Plot panel ---------------------------------------------------- */
+  .plot {
+    position: relative;
+    border-right: 1.5px solid var(--ink);
+    min-height: 640px;
+    background:
+      linear-gradient(rgba(11, 31, 58, .05) 1px, transparent 1px) 0 0 / 100% 24px,
+      linear-gradient(90deg, rgba(11, 31, 58, .05) 1px, transparent 1px) 0 0 / 24px 100%,
+      linear-gradient(rgba(11, 31, 58, .11) 1px, transparent 1px) 0 0 / 100% 120px,
+      linear-gradient(90deg, rgba(11, 31, 58, .11) 1px, transparent 1px) 0 0 / 120px 100%;
+    overflow: hidden;
+  }
+  .plot canvas, .plot svg.over {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .plot svg.over { pointer-events: none; }
+  .corner {
+    position: absolute;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--tick);
+    padding: 2px 6px;
+    background: rgba(242, 234, 216, .55);
+    backdrop-filter: blur(2px);
+  }
+  .corner.tl { top: 12px; left: 14px; }
+  .corner.tr { top: 12px; right: 14px; }
+  .corner.bl { bottom: 12px; left: 14px; }
+  .corner.br { bottom: 12px; right: 14px; }
+  .plot-title {
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-size: 14px;
+    color: var(--ink-soft);
+    letter-spacing: .02em;
+    padding: 2px 14px;
+    background: rgba(242, 234, 216, .7);
+    border-bottom: 1px solid var(--rule);
+    font-variation-settings: "opsz" 48;
+  }
+  .legend {
+    position: absolute;
+    bottom: 42px;
+    left: 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--ink-soft);
+    background: rgba(242, 234, 216, .78);
+    backdrop-filter: blur(3px);
+    padding: 10px 14px;
+    border: 1px solid var(--rule);
+    max-width: 240px;
+    line-height: 1.6;
+  }
+  .legend h5 {
+    margin: 0 0 6px;
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--ink);
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .legend .row { display: flex; align-items: center; gap: 8px; }
+  .legend .row .swatch { width: 16px; height: 2.5px; background: var(--ink); }
+  .legend .row .swatch.live { background: var(--accent); height: 4px; }
+  .legend .row .swatch.past { background: var(--ink-ghost); height: 1.5px; }
+
+  /* Function explorer list rows */
+  #fn-list .row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    padding: 4px 10px;
+    cursor: pointer;
+    border-bottom: 1px dotted var(--rule-soft);
+    color: var(--ink);
+    align-items: center;
+  }
+  #fn-list .row:hover { background: var(--accent-pale); }
+  #fn-list .row.active { background: var(--ink); color: var(--paper); }
+  #fn-list .row.active .ret { color: var(--rule-soft); }
+  #fn-list .row .name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #fn-list .row .ret { color: var(--tick); font-size: 9px; font-style: italic; }
+
+  /* Function form layout */
+  #fn-form .row {
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    gap: 10px;
+    align-items: center;
+    margin: 4px 0;
+  }
+  #fn-form .row .label { color: var(--tick); font-size: 9px; text-align: right; }
+  #fn-form .row .label .name { color: var(--ink); font-style: italic; font-family: 'Fraunces', serif; font-size: 11px; }
+  #fn-form input.fn-arg {
+    background: transparent;
+    border: none;
+    border-bottom: 1px dotted var(--rule);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ink);
+    padding: 2px 4px;
+    outline: none;
+    width: 100%;
+  }
+  #fn-form input.fn-arg:focus { border-bottom-color: var(--accent); }
+  #fn-form .signature {
+    color: var(--accent);
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-size: 13px;
+    margin-bottom: 6px;
+    word-break: break-word;
+  }
+  #fn-form .signature b { color: var(--ink); font-weight: 500; }
+
+  /* Sidebar panel ------------------------------------------------- */
+  .side {
+    display: grid;
+    grid-template-rows: auto auto 1fr auto;
+    background: var(--paper-warm);
+  }
+  .side-section {
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .side-section:last-child { border-bottom: none; }
+  .side-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: .24em;
+    text-transform: uppercase;
+    color: var(--tick);
+    margin-bottom: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .side-label .hint {
+    text-transform: none;
+    letter-spacing: .06em;
+    color: var(--ink-soft);
+    font-style: italic;
+    font-family: 'Fraunces', serif;
+  }
+
+  .datasets {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .dataset {
+    border: 1.5px solid var(--ink);
+    background: var(--paper);
+    padding: 12px 14px;
+    cursor: pointer;
+    font-family: 'Fraunces', serif;
+    text-align: left;
+    transition: all .15s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  .dataset::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, var(--accent-pale) 0%, transparent 70%);
+    opacity: 0;
+    transition: opacity .2s ease;
+  }
+  .dataset:hover { transform: translate(-1px, -1px); box-shadow: 2px 2px 0 0 var(--ink); }
+  .dataset:hover::after { opacity: 1; }
+  .dataset.active {
+    background: var(--ink);
+    color: var(--paper);
+  }
+  .dataset.active::after { opacity: 0; }
+  .dataset .t {
+    display: block;
+    font-size: 15px;
+    font-style: italic;
+    font-weight: 400;
+    margin-bottom: 2px;
+    position: relative;
+    z-index: 1;
+    font-variation-settings: "opsz" 48;
+  }
+  .dataset .s {
+    display: block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: .12em;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    position: relative;
+    z-index: 1;
+  }
+  .dataset.active .s { color: var(--rule-soft); }
+  .dataset.active .t { color: var(--paper); }
+
+  .controls {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  button.act {
+    background: var(--ink);
+    color: var(--paper);
+    border: 1.5px solid var(--ink);
+    padding: 10px 18px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all .15s ease;
+    box-shadow: 3px 3px 0 0 var(--ink);
+  }
+  button.act:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 5px 5px 0 0 var(--ink);
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  button.act:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 0 var(--ink); }
+  button.act.ghost {
+    background: transparent;
+    color: var(--ink);
+  }
+  button.act.ghost:hover { background: var(--accent); color: var(--paper); }
+
+  .slider-row {
+    display: flex; gap: 12px; align-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; color: var(--ink-soft);
+  }
+  .slider-row input[type=range] {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 2px;
+    background: var(--ink);
+    cursor: pointer;
+  }
+  .slider-row input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--accent);
+    border: 1.5px solid var(--ink);
+    cursor: pointer;
+    box-shadow: 0 0 0 1px var(--paper);
+  }
+  .slider-row input[type=range]::-moz-range-thumb {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--accent);
+    border: 1.5px solid var(--ink);
+  }
+
+  /* Terminal / ticker --------------------------------------- */
+  .terminal {
+    background: var(--terminal-bg);
+    color: var(--terminal-fg);
+    border: 1.5px solid var(--ink);
+    box-shadow: inset 0 0 24px rgba(0,0,0,.35);
+    padding: 14px 16px 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    line-height: 1.55;
+    height: 240px;
+    overflow: hidden;
+    position: relative;
+  }
+  .terminal::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      repeating-linear-gradient(to bottom, transparent 0 2px, rgba(0,0,0,.12) 2px 3px);
+    pointer-events: none;
+  }
+  .terminal-head {
+    display: flex; justify-content: space-between;
+    color: var(--terminal-accent);
+    border-bottom: 1px dashed rgba(255,255,255,.15);
+    padding-bottom: 6px;
+    margin-bottom: 8px;
+    font-size: 9px;
+    letter-spacing: .22em;
+    text-transform: uppercase;
+  }
+  .terminal-body { position: relative; z-index: 1; }
+  .terminal-body .line {
+    opacity: 0;
+    animation: line-in .3s ease forwards;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .terminal-body .line .t { color: var(--terminal-accent); }
+  .terminal-body .line .ok { color: var(--terminal-ok); }
+  .terminal-body .line .n { color: #f4d35e; }
+  @keyframes line-in {
+    from { opacity: 0; transform: translateX(-6px); }
+    to   { opacity: .95; transform: translateX(0); }
+  }
+
+  /* ── Curtain / loading ────────────────────────────────── */
+  .curtain {
+    position: absolute; inset: 0;
+    background: rgba(242, 234, 216, .94);
+    backdrop-filter: blur(2px);
+    display: flex;
+    flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: var(--ink);
+    z-index: 30;
+    transition: opacity .6s ease;
+  }
+  .curtain.hidden { opacity: 0; pointer-events: none; }
+  .bar {
+    width: 260px; height: 6px;
+    border: 1px solid var(--ink);
+    position: relative; overflow: hidden;
+  }
+  .bar::before {
+    content: ""; position: absolute; inset: 0;
+    background: repeating-linear-gradient(45deg, var(--ink) 0 6px, transparent 6px 12px);
+    animation: march 1.4s linear infinite;
+  }
+  @keyframes march { to { background-position: 16.97px 0; } }
+  .curtain small {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-size: 13px;
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--ink-soft);
+    font-weight: 300;
+    max-width: 340px;
+    text-align: center;
+  }
+
+  /* ── Detail lists ─────────────────────────────────────── */
+  .trajectories {
+    max-height: 220px;
+    overflow-y: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    scrollbar-width: thin;
+    scrollbar-color: var(--rule) transparent;
+  }
+  .trajectories .row {
+    display: grid;
+    grid-template-columns: 32px 1fr auto auto;
+    gap: 10px;
+    padding: 4px 0;
+    border-bottom: 1px dotted var(--rule-soft);
+    align-items: center;
+  }
+  .trajectories .row:last-child { border-bottom: none; }
+  .trajectories .row .id {
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .trajectories .row .name {
+    color: var(--ink);
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-size: 12px;
+    font-variation-settings: "opsz" 48;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .trajectories .row .pts { color: var(--tick); font-size: 9px; }
+  .trajectories .row .swatch {
+    width: 14px; height: 2.5px;
+    background: var(--ink);
+  }
+
+  /* ── Footer ───────────────────────────────────────────── */
+  footer {
+    padding: 44px clamp(24px, 5vw, 80px) 72px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 40px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    line-height: 1.7;
+    color: var(--ink-soft);
+    letter-spacing: .06em;
+  }
+  footer h4 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: .24em;
+    text-transform: uppercase;
+    margin: 0 0 8px;
+    color: var(--accent);
+  }
+  footer b { color: var(--ink); font-weight: 600; }
+  footer .fig {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-size: 32px;
+    color: var(--ink);
+    line-height: 1;
+    display: block;
+    margin-bottom: 4px;
+    font-variation-settings: "opsz" 144, "SOFT" 80;
+    font-feature-settings: "tnum";
+  }
+  footer p { margin: 0 0 6px; }
+
+  #leaflet-map { position: absolute; inset: 0; background: var(--paper-warm); filter: grayscale(35%) sepia(15%) brightness(1.05) contrast(.98); }
+  #leaflet-map .leaflet-control-attribution { background: rgba(242,234,216,.85); font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--ink-soft); border-top: 1px solid var(--rule); }
+  #leaflet-map .leaflet-control-zoom a { background: var(--paper-warm); color: var(--ink); border-color: var(--ink); font-family: 'JetBrains Mono', monospace; }
+  #leaflet-map .leaflet-control-zoom a:hover { background: var(--accent); color: var(--paper); }
+  #cv-traj { position: absolute; inset: 0; pointer-events: none; z-index: 400; }
+  @media (max-width: 1000px) {
+    header { grid-template-columns: 1fr; }
+    .meta { text-align: left; border-left: none; border-top: 1px solid var(--rule); padding: 12px 0 0; }
+    .instrument { grid-template-columns: 1fr; }
+    .plot { border-right: none; border-bottom: 1.5px solid var(--ink); min-height: 480px; }
+    .hud { grid-template-columns: repeat(3, 1fr); }
+    .hud .cell:nth-child(3n) { border-right: none; }
+    .hud .cell:nth-child(n+4) { border-top: 1px solid var(--rule); }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <div class="eyebrow">
+        <span><span class="dot"></span>Live Field · tgeompoint_in ⟶ temporal_as_mfjson</span>
+        <span id="meta-version">MEOS 1.4·dev</span>
+        <span>14 April 2026</span>
+      </div>
+      <h1>Moving<br>Entities<span class="amp"> &amp; </span>wasm<sup>64</sup></h1>
+      <p class="subtitle">A small fleet of temporal trajectories — vessels, taxis, cyclists, migrating birds —
+        parsed in real time by <em>MEOS</em>, the same C engine that powers MobilityDB,
+        compiled to a <em>3.6 MB 64-bit</em> WebAssembly module and drawn frame by frame from your browser's main thread.</p>
+    </div>
+    <div class="meta">
+      <div><span class="key">binary</span>&nbsp; <b>meos.wasm</b> · 3.6 MiB</div>
+      <div><span class="key">target</span>&nbsp; <b>wasm64-emscripten</b> · LP64</div>
+      <div><span class="key">memory</span>&nbsp; <b>MEMORY64=1</b> · i64 index</div>
+      <div><span class="key">deps</span>&nbsp; geos 3.13 · proj 9.5 · gsl 2.8 · json-c 0.18</div>
+      <div><span class="key">build</span>&nbsp; emcc 5.0.5 · -O2 · static</div>
+    </div>
+  </header>
+
+  <div class="hud">
+    <div class="cell"><span class="k">Trajectories</span><div class="v" id="hud-traj">0</div></div>
+    <div class="cell"><span class="k">Fleet length</span><div class="v" id="hud-length">0<small>°</small></div></div>
+    <div class="cell"><span class="k">Nearest pair</span><div class="v accent" id="hud-nad">—</div></div>
+    <div class="cell"><span class="k">Parse budget</span><div class="v" id="hud-parse">0.00<small>ms</small></div></div>
+    <div class="cell"><span class="k">Heap used</span><div class="v" id="hud-heap">—</div></div>
+    <div class="cell"><span class="k">Sim clock</span><div class="v" id="hud-clock">00:00</div></div>
+  </div>
+
+  <section class="instrument" id="instrument">
+    <div class="plot" id="plot">
+      <div class="plot-title" id="plot-title">Brussels urban mobility · interpolated</div>
+      <div id="leaflet-map"></div>
+      <canvas id="cv-traj"></canvas>
+      <div class="corner tl">Web Mercator · EPSG:3857</div>
+      <div class="corner br">© OSM contributors · MEOS</div>
+      <div class="legend">
+        <h5>Reading the chart</h5>
+        <div class="row"><span class="swatch"></span> path</div>
+        <div class="row"><span class="swatch live"></span> active head</div>
+        <div class="row"><span class="swatch past"></span> recent trail</div>
+        <div style="margin-top:6px;font-size:9px;color:var(--tick);">each entity is a MEOS <code>Temporal</code> struct reparsed as a stream.</div>
+      </div>
+      <div class="curtain" id="curtain">
+        <div class="bar"></div>
+        <div>Loading MEOS · wasm64</div>
+        <small>streaming 3.6 MiB of compiled geometry + 9.7 MiB of proj.db &amp; tz data</small>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="side-section">
+        <div class="side-label"><span>field</span><span class="hint">pick a swarm</span></div>
+        <div class="datasets" id="datasets"></div>
+      </div>
+
+      <div class="side-section">
+        <div class="side-label"><span>playback</span></div>
+        <div class="controls">
+          <button class="act" id="btn-play">▸ Play</button>
+          <button class="act ghost" id="btn-reparse">↻ Re-parse</button>
+        </div>
+        <div class="slider-row" style="margin-top:14px">
+          <span>speed</span>
+          <input id="sp-speed" type="range" min="0.1" max="4" step="0.1" value="1" />
+          <span id="sp-speed-v">1.00×</span>
+        </div>
+        <div class="slider-row" style="margin-top:10px">
+          <span>simplify ε</span>
+          <input id="sp-eps" type="range" min="0" max="0.03" step="0.0005" value="0" />
+          <span id="sp-eps-v">off</span>
+        </div>
+        <div class="slider-row" style="margin-top:6px">
+          <span>distance</span>
+          <input id="sp-dist" type="range" min="0" max="10" step="1" value="0" />
+          <span id="sp-dist-v">off</span>
+        </div>
+      </div>
+
+      <div class="side-section" id="format-lab">
+        <div class="side-label">
+          <span>format lab</span>
+          <span class="hint" id="fmt-hint">any of <em>WKT</em>, <em>MF-JSON</em>, <em>HexWKB</em></span>
+        </div>
+        <textarea id="fmt-in" spellcheck="false" rows="4" style="width:100%;background:transparent;border:1px dashed var(--rule);font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink);padding:8px 10px;outline:none;resize:vertical;caret-color:var(--accent);">POINT(4.36 50.84)@2026-04-14 09:00:00</textarea>
+        <div class="controls" style="margin-top:10px;">
+          <button class="act" id="fmt-parse">▸ Parse</button>
+          <button class="act ghost" id="fmt-roundtrip">↺ to HexWKB</button>
+        </div>
+        <div id="fmt-out" style="margin-top:10px;font-family:'JetBrains Mono',monospace;font-size:10px;line-height:1.55;color:var(--ink-soft);max-height:140px;overflow:auto;"></div>
+      </div>
+
+      <div class="side-section" id="fn-explorer">
+        <div class="side-label">
+          <span>function explorer</span>
+          <span class="hint"><span id="fn-count">…</span> funcs · <em>auto-bound</em></span>
+        </div>
+        <div style="display:flex;gap:6px;margin-bottom:8px;">
+          <input id="fn-search" placeholder="filter by name…" spellcheck="false"
+                 style="flex:1;background:transparent;border:1px dashed var(--rule);font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink);padding:7px 10px;outline:none;caret-color:var(--accent);" />
+          <select id="fn-category"
+                 style="background:transparent;border:1px dashed var(--rule);font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink);padding:7px 6px;outline:none;cursor:pointer;">
+            <option value="">all</option>
+          </select>
+        </div>
+        <div id="fn-list" style="max-height:140px;overflow-y:auto;border:1px solid var(--rule);background:rgba(242,234,216,.6);font-family:'JetBrains Mono',monospace;font-size:10px;line-height:1.5;scrollbar-width:thin;"></div>
+        <div id="fn-form" style="margin-top:10px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink-soft);min-height:24px;"></div>
+        <div class="controls" style="margin-top:8px;">
+          <button class="act" id="fn-run">▸ Execute</button>
+          <button class="act ghost" id="fn-sample">↺ Sample</button>
+        </div>
+        <div id="fn-result" style="margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink);max-height:140px;overflow:auto;"></div>
+      </div>
+      <div class="side-section" style="padding:0;">
+        <div class="terminal">
+          <div class="terminal-head">
+            <span>meos · stdout</span>
+            <span>▎▎▎ live</span>
+          </div>
+          <div class="terminal-body" id="term"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div>
+      <h4>The binary</h4>
+      <span class="fig">3.6<small style="font-size:12px;font-style:normal;"> MiB</small></span>
+      <p>WebAssembly, wasm64 / MEMORY64=1, <b>-O2</b>. Statically linked:
+      GEOS, PROJ (with SQLite), JSON-C, GSL.</p>
+    </div>
+    <div>
+      <h4>Bundled data</h4>
+      <span class="fig">9.7<small style="font-size:12px;font-style:normal;"> MiB</small></span>
+      <p>Preloaded <b>proj.db</b> for coordinate reprojection and the IANA
+        <b>tz database</b> for timezone-aware timestamp parsing. Both live on
+        the wasm MEMFS; no network round-trips.</p>
+    </div>
+    <div>
+      <h4>Patches</h4>
+      <span class="fig">0</span>
+      <p>Applied to upstream MEOS. The wasm64 ABI is <b>LP64</b>, so all of
+        Postgres's <em>sizeof(long)==8</em> assumptions ride along for free.</p>
+    </div>
+    <div>
+      <h4>Architecture</h4>
+      <span class="fig" id="foot-arch">LP64</span>
+      <p><b>sizeof(void*)</b> = 8, <b>sizeof(long)</b> = 8, <b>size_t</b> = 8.
+        Pointers cross the FFI boundary as JS <code>BigInt</code>. The heap
+        is addressed by <code>i64</code> memory instructions.</p>
+    </div>
+  </footer>
+</main>
+
+<script src="./meos.js"></script>
+<script src="./meos-api.js"></script>
+<script type="module">
+  // ═══════════════════════════════════════════════════════════════════
+  // meos-wasm · live trajectory field
+  // Procedurally generates several swarms of WKT temporal points,
+  // pipes them through MEOS for real parsing + MF-JSON round-trip,
+  // then animates the interpolated heads along the paths in canvas.
+  // ═══════════════════════════════════════════════════════════════════
+
+  const $ = s => document.querySelector(s);
+  const el = (t, p) => Object.assign(document.createElement(t), p || {});
+  const fmtN = n => n.toLocaleString('en', { maximumFractionDigits: 0 });
+  const fmtB = n => n < 1024 ? n + 'B' : n < 1e6 ? (n/1024).toFixed(1)+'K' : (n/1e6).toFixed(2)+'M';
+
+  // ── DOM refs ─────────────────────────────────────────────────────────
+  const cv       = $('#cv-traj');
+  const ctx      = cv.getContext('2d');
+  const svgOver  = $('#svg-over');
+  const plot     = $('#plot');
+  const curtain  = $('#curtain');
+  const btnPlay  = $('#btn-play');
+  const btnReparse = $('#btn-reparse');
+  const spSpeed  = $('#sp-speed');
+  const spSpeedV = $('#sp-speed-v');
+  const datasetsEl = $('#datasets');
+  const trajList = $('#traj-list');
+  const term     = $('#term');
+  const entitiesHint = $('#entities-hint');
+  const plotTitle = $('#plot-title');
+
+  const hud = {
+    traj   : $('#hud-traj'),
+    length : $('#hud-length'),
+    nad    : $('#hud-nad'),
+    parse  : $('#hud-parse'),
+    heap   : $('#hud-heap'),
+    clock  : $('#hud-clock'),
+  };
+
+  // ── Datasets ─────────────────────────────────────────────────────────
+  // Each dataset is a procedural swarm generator. (lon, lat) centres and
+  // a characteristic scale. We generate N trajectories, each as a list of
+  // (x, y, t) points, and format them as WKT so MEOS can parse them.
+
+  const DATASETS = [
+    {
+      id: 'brussels',
+      title: 'Brussels urban fleet',
+      subtitle: '38 vehicles',
+      plotTitle: 'Brussels urban mobility · interpolated',
+      count: 38,
+      center: [4.36, 50.84],
+      spread: 0.085,
+      kind: 'taxi',
+      accent: '#b83a1d',
+      names: [
+        'Taxi 42','Taxi 17','Tram 81','Bus 71','Bus 27','Taxi 03','Taxi 88',
+        'Courier α','Courier β','Ambulance 12','Taxi 55','Tram 3','Tram 7',
+        'Bus 95','Taxi 91','Taxi 64','Taxi 30','Taxi 22','Taxi 09','Taxi 77',
+        'Courier γ','Courier δ','Taxi 11','Bus 48','Bus 53','Tram 25',
+        'Taxi 86','Taxi 34','Taxi 19','Taxi 60','Taxi 72','Tram 94',
+        'Bus 39','Taxi 47','Bus 14','Taxi 05','Taxi 29','Taxi 83',
+      ],
+    },
+    {
+      id: 'vessels',
+      title: 'North Sea vessels',
+      subtitle: '24 ships',
+      plotTitle: 'AIS · North Sea traffic',
+      count: 24,
+      center: [2.8, 51.7],
+      spread: 1.6,
+      kind: 'vessel',
+      accent: '#1f5272',
+      names: [
+        'Artemis','Borealis','Calypso','Dauntless','Elissa','Faro','Geyser',
+        'Hermes','Icarus','Juno','Kestrel','Lyra','Mistral','Nereid',
+        'Orion','Perseus','Quorum','Rhea','Sirius','Thetis','Ursa',
+        'Vega','Wren','Xanthus',
+      ],
+    },
+    {
+      id: 'birds',
+      title: 'Bird migration',
+      subtitle: '18 tags',
+      plotTitle: 'GPS telemetry · migrating storks',
+      count: 18,
+      center: [4.4, 50.8],
+      spread: 3.5,
+      kind: 'bird',
+      accent: '#2f6b4b',
+      names: [
+        'Anka','Blanche','Cirrus','Duna','Esme','Fauve','Greta','Helga',
+        'Inge','Jovi','Kora','Lumi','Mara','Noor','Ondi','Pia','Runa','Sole',
+      ],
+    },
+    {
+      id: 'peloton',
+      title: 'Cycling peloton',
+      subtitle: '56 riders',
+      plotTitle: 'Peloton · interpolated positions',
+      count: 56,
+      center: [4.36, 50.84],
+      spread: 0.12,
+      kind: 'cyclist',
+      accent: '#b8860b',
+      names: null,
+    },
+    {
+      id: 'zones',
+      title: 'Brussels event zones',
+      subtitle: '12 polygons',
+      plotTitle: 'Moving regions · tgeometry_in ⟶ geo_as_geojson',
+      count: 12,
+      center: [4.36, 50.84],
+      spread: 0.09,
+      kind: 'region',
+      accent: '#1f5272',
+      names: ['Parade','March','Relay','Run','Festival','Rally','Fair','Picnic','Summit','Bloc','Drift','Convoy'],
+    },
+    {
+      id: 'mfjson',
+      title: 'MF-JSON import',
+      subtitle: '8 via mfjson',
+      plotTitle: 'MF-JSON ingestion · temporal_from_mfjson',
+      count: 8,
+      center: [4.36, 50.84],
+      spread: 0.08,
+      kind: 'mfjson',
+      accent: '#2f6b4b',
+      names: ['Stream α','Stream β','Stream γ','Stream δ','Stream ε','Stream ζ','Stream η','Stream θ'],
+    },
+    {
+      id: 'stib',
+      title: 'STIB live · today',
+      subtitle: '1500+ vehicles',
+      plotTitle: 'STIB · MIVB live trips · MF-JSON via tgeompoint_from_mfjson',
+      kind: 'stib',
+      accent: '#b83a1d',
+      url: 'stib-trips.json',
+      maxCount: 200,
+    },
+  ];
+
+  let currentDataset = DATASETS[0];
+  let currentSwarm = [];   // {id, name, wkt, coords:[[x,y]], times:[], bytes, parseMs}
+  let bbox = null;
+  let playing = true;
+  let speed = 1;
+  let simT = 0;            // simulated seconds from 0..totalSpan
+
+  // ── Procedural WKT generators ────────────────────────────────────────
+  function makeWKT(kind, seed, center, spread) {
+    // Deterministic RNG from seed
+    let s = seed * 2654435761 >>> 0;
+    const rand = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+    const randN = () => (rand() - 0.5);
+
+    const [cx, cy] = center;
+    const dur = 3000 + Math.floor(rand() * 3000); // seconds
+    const nPts = 14 + Math.floor(rand() * 10);    // 14..23 waypoints
+
+    // Start point varies per entity
+    let x = cx + randN() * spread;
+    let y = cy + randN() * spread;
+    // Heading + curvature depend on "kind"
+    let bearing = rand() * Math.PI * 2;
+    const speedDeg = {
+      taxi:    0.0042,
+      vessel:  0.075,
+      bird:    0.20,
+      cyclist: 0.006,
+    }[kind] || 0.005;
+    const wiggle = {
+      taxi:    0.6,
+      vessel:  0.12,
+      bird:    0.2,
+      cyclist: 0.28,
+    }[kind] || 0.3;
+
+    const pts = [];
+    const t0 = new Date('2026-04-14T08:00:00Z');
+    for (let i = 0; i < nPts; i++) {
+      const t = new Date(t0.getTime() + i * (dur * 1000 / (nPts - 1)));
+      pts.push([+x.toFixed(5), +y.toFixed(5), t.toISOString().replace('T', ' ').slice(0, 19)]);
+      bearing += randN() * wiggle;
+      const step = speedDeg * (0.7 + rand() * 0.6);
+      x += Math.cos(bearing) * step;
+      y += Math.sin(bearing) * step * 0.7;
+    }
+    const centroids = pts.map(([x, y]) => [x, y]);
+    const times     = pts.map(([_x, _y, t]) => t);
+    if (kind === 'region') {
+      // Wrap each centroid in a small hexagon polygon drifting with it.
+      const polyPts = pts.map(([cx, cy, t]) => {
+        const r = 0.012 + rand() * 0.006;
+        const ring = [];
+        for (let k = 0; k < 6; k++) {
+          const a = (k / 6) * Math.PI * 2;
+          ring.push(`${(cx + Math.cos(a) * r).toFixed(5)} ${(cy + Math.sin(a) * r * 0.7).toFixed(5)}`);
+        }
+        ring.push(ring[0]);
+        return `POLYGON((${ring.join(', ')}))@${t}`;
+      });
+      return { wkt: `[${polyPts.join(', ')}]`, duration: dur, centroids, times };
+    }
+    // Default: moving point linear-sequence WKT.
+    const body = pts.map(([x, y, t]) => `POINT(${x} ${y})@${t}`).join(', ');
+    return { wkt: `[${body}]`, duration: dur, centroids, times };
+  }
+
+  // ── Drawing ──────────────────────────────────────────────────────────
+  function resizeCanvas() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const r = plot.getBoundingClientRect();
+    cv.width = Math.floor(r.width * dpr);
+    cv.height = Math.floor(r.height * dpr);
+    cv.style.width = r.width + 'px';
+    cv.style.height = r.height + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (lmap) lmap.invalidateSize();
+  }
+
+  function computeBBox(swarm) {
+    let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+    for (const tr of swarm) for (const [x,y] of tr.coords) {
+      if (x<minX) minX=x; if (x>maxX) maxX=x;
+      if (y<minY) minY=y; if (y>maxY) maxY=y;
+    }
+    const w=maxX-minX||1, h=maxY-minY||1;
+    const r = Math.max(w, h);
+    const cx = (minX+maxX)/2, cy = (minY+maxY)/2;
+    return {
+      minX: cx - r/2 * 1.08, maxX: cx + r/2 * 1.08,
+      minY: cy - r/2 * 1.08, maxY: cy + r/2 * 1.08,
+    };
+  }
+
+  let lmap = null;
+  function project(lng, lat) {
+    if (lmap) {
+      const p = lmap.latLngToContainerPoint([lat, lng]);
+      return [p.x, p.y];
+    }
+    const r = plot.getBoundingClientRect();
+    const pad = 48;
+    const bx = (lng - bbox.minX) / (bbox.maxX - bbox.minX);
+    const by = (lat - bbox.minY) / (bbox.maxY - bbox.minY);
+    return [pad + bx * (r.width - pad*2), r.height - pad - by * (r.height - pad*2)];
+  }
+
+  // Static overlays (graticule, ticks, compass) re-rendered on resize/bbox-change
+  function fitBboxToMap() {
+    if (!lmap || !bbox) return;
+    lmap.fitBounds([[bbox.minY, bbox.minX], [bbox.maxY, bbox.maxX]], { padding: [40, 40] });
+  }
+  function drawStatic() {
+    return; // overlays now handled by Leaflet itself; keep stub to avoid edits
+    // unreachable — kept for reference
+    // eslint-disable-next-line
+    svgOver.innerHTML = '';
+    const r = plot.getBoundingClientRect();
+    svgOver.setAttribute('viewBox', `0 0 ${r.width} ${r.height}`);
+    const SVGNS = 'http://www.w3.org/2000/svg';
+    const mk = (name, attrs={}) => {
+      const n = document.createElementNS(SVGNS, name);
+      for (const [k,v] of Object.entries(attrs)) n.setAttribute(k, v);
+      return n;
+    };
+    const pad = 48;
+
+    // Ticks + labels
+    const steps = 8;
+    for (let i = 0; i <= steps; i++) {
+      const fx = pad + i * (r.width - pad*2) / steps;
+      svgOver.appendChild(mk('line', { x1:fx, y1:r.height-pad, x2:fx, y2:r.height-pad+5, stroke:'var(--tick)','stroke-width':0.8 }));
+      const lon = (bbox ? bbox.minX + (bbox.maxX-bbox.minX)*i/steps : i).toFixed(3);
+      const t = mk('text', { x:fx, y:r.height-pad+16, 'text-anchor':'middle', 'font-family':'JetBrains Mono','font-size':8, fill:'var(--tick)' });
+      t.textContent = lon;
+      svgOver.appendChild(t);
+
+      const fy = r.height - pad - i * (r.height - pad*2) / steps;
+      svgOver.appendChild(mk('line', { x1:pad-5, y1:fy, x2:pad, y2:fy, stroke:'var(--tick)','stroke-width':0.8 }));
+      const lat = (bbox ? bbox.minY + (bbox.maxY-bbox.minY)*i/steps : i).toFixed(3);
+      const t2 = mk('text', { x:pad-7, y:fy+3, 'text-anchor':'end', 'font-family':'JetBrains Mono','font-size':8, fill:'var(--tick)' });
+      t2.textContent = lat;
+      svgOver.appendChild(t2);
+    }
+    svgOver.appendChild(mk('line', { x1:pad, y1:r.height-pad, x2:r.width-pad, y2:r.height-pad, stroke:'var(--ink)','stroke-width':1 }));
+    svgOver.appendChild(mk('line', { x1:pad, y1:pad, x2:pad, y2:r.height-pad, stroke:'var(--ink)','stroke-width':1 }));
+
+    // Compass rose top-right
+    const gx = r.width - 60, gy = 68;
+    const g = mk('g', { transform:`translate(${gx},${gy})` });
+    g.appendChild(mk('circle', { r:22, fill:'rgba(242,234,216,.75)', stroke:'var(--ink)','stroke-width':0.8 }));
+    g.appendChild(mk('circle', { r:16, fill:'none', stroke:'var(--ink)','stroke-width':0.4, opacity:0.4 }));
+    for (let a=0;a<360;a+=22.5) {
+      const rad=(a-90)*Math.PI/180;
+      const l=a%90===0?22:a%45===0?19:17;
+      g.appendChild(mk('line',{x1:Math.cos(rad)*14,y1:Math.sin(rad)*14,x2:Math.cos(rad)*l,y2:Math.sin(rad)*l,stroke:'var(--ink)','stroke-width':a%90===0?1:0.5,opacity:0.7}));
+    }
+    g.appendChild(mk('path',{d:'M 0 -16 L 3 0 L 0 16 L -3 0 Z',fill:'var(--accent)',stroke:'var(--ink)','stroke-width':0.6}));
+    const nLabel = mk('text',{x:0,y:-27,'text-anchor':'middle','font-family':'JetBrains Mono','font-size':9,fill:'var(--ink)','font-weight':'600'});
+    nLabel.textContent='N';
+    g.appendChild(nLabel);
+    svgOver.appendChild(g);
+
+    // Scale bar bottom-left
+    const sb = mk('g', { transform:`translate(${pad + 18}, ${r.height - pad - 14})` });
+    const scaleDeg = bbox ? (bbox.maxX - bbox.minX) * 0.12 : 0.01;
+    const scalePx = (r.width - pad*2) * 0.12;
+    sb.appendChild(mk('line',{x1:0,y1:0,x2:scalePx,y2:0,stroke:'var(--ink)','stroke-width':2}));
+    sb.appendChild(mk('line',{x1:0,y1:-4,x2:0,y2:4,stroke:'var(--ink)','stroke-width':1.5}));
+    sb.appendChild(mk('line',{x1:scalePx,y1:-4,x2:scalePx,y2:4,stroke:'var(--ink)','stroke-width':1.5}));
+    const sLabel = mk('text',{x:scalePx/2,y:-6,'text-anchor':'middle','font-family':'JetBrains Mono','font-size':8,fill:'var(--ink)'});
+    sLabel.textContent = scaleDeg.toFixed(3) + '°';
+    sb.appendChild(sLabel);
+    svgOver.appendChild(sb);
+  }
+
+  // Main animation loop
+  let lastFrame = 0;
+  let meosCallsThisFrame = 0;
+  function draw(now) {
+    meosCallsThisFrame = 0;
+    if (!bbox || !currentSwarm.length) { requestAnimationFrame(draw); return; }
+    const dt = Math.min(50, now - lastFrame || 16);
+    lastFrame = now;
+    if (playing) simT += dt * speed * 0.004; // scale animation
+
+    const r = plot.getBoundingClientRect();
+    ctx.clearRect(0, 0, r.width, r.height);
+
+    // Draw each trajectory's full path (faint) then its recent trail (darker)
+    // then its moving head marker.
+    for (const tr of currentSwarm) {
+      // STIB point-only mode: skip the path + trail entirely
+      if (tr.isPointOnly) { /* path skipped */ } else
+      // Static path ----
+      if (Array.isArray(tr.coords) && tr.coords.length > 0) {
+        ctx.strokeStyle = 'rgba(11, 31, 58, .28)';
+        ctx.lineWidth = 1.3;
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        let first = true;
+        for (const c of tr.coords) {
+          if (!Array.isArray(c) || c.length < 2) continue;
+          const [px, py] = project(c[0], c[1]);
+          if (first) { ctx.moveTo(px, py); first = false; }
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      }
+    }
+
+    // Now the moving heads + recent trails on top
+    const nCoords = currentSwarm.length;
+    for (const tr of currentSwarm) {
+            if (tr.isRegion) {
+        if (!tr.handle) continue;
+        const phase  = ((simT / 18) + tr.phaseOffset) % 1;
+        const dur    = tr.endMs - tr.startMs;
+        const tQuery = tr.startMs + phase * dur;
+        const gj = Module.ccall('meos_tgeometry_value_at_geojson', 'string',
+                                ['pointer', 'number', 'number'],
+                                [tr.handle, tQuery, 6]);
+        if (!gj) continue;
+        meosCallsThisFrame++;
+        let coords;
+        try {
+          const g = JSON.parse(gj);
+          coords = g.type === 'Polygon' ? g.coordinates[0] : null;
+        } catch { continue; }
+        if (!coords || coords.length < 3) continue;
+        // Fill + stroke the polygon on canvas.
+        ctx.beginPath();
+        coords.forEach(([x, y], i) => {
+          const [pxp, pyp] = project(x, y);
+          if (i === 0) ctx.moveTo(pxp, pyp);
+          else ctx.lineTo(pxp, pyp);
+        });
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(31, 82, 114, .18)';
+        ctx.fill();
+        ctx.strokeStyle = tr.color;
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+        continue;
+      }
+      const n = tr.coords.length;
+      if (n < 2 || !tr.handle) continue;
+      const phase  = ((simT / 18) + tr.phaseOffset) % 1;
+      const dur    = tr.endMs - tr.startMs;
+      const tQuery = tr.startMs + phase * dur;
+      const ok = valueAtFn(tr.handle, tQuery, frameOutPtr);
+      if (!ok) continue;
+      meosCallsThisFrame++;
+      const hx = Module.HEAPF64[frameOutIdx];
+      const hy = Module.HEAPF64[frameOutIdx + 1];
+      const [px, py] = project(hx, hy);
+      const span = n - 1;
+      const i = Math.min(Math.floor(phase * span), span - 1);
+
+      // Trail: last ~9 segments before head, fading (skipped for STIB)
+      const trailLen = tr.isPointOnly ? 0 : 9;
+      ctx.lineCap = 'round';
+      for (let k = 1; k <= trailLen; k++) {
+        const ki = Math.max(0, i - k + 1);
+        const c1 = tr.coords[ki];
+        const c2 = tr.coords[ki + 1] || tr.coords[ki];
+        if (!Array.isArray(c1) || !Array.isArray(c2)) continue;
+        const [tx1, ty1] = c1;
+        const [tx2, ty2] = c2;
+        const [ax, ay] = project(tx1, ty1);
+        const [bxp, byp] = project(tx2, ty2);
+        ctx.strokeStyle = `rgba(11, 31, 58, ${0.55 * (1 - k / (trailLen + 1))})`;
+        ctx.lineWidth = 1.6 * (1 - k / (trailLen + 2));
+        ctx.beginPath();
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(bxp, byp);
+        ctx.stroke();
+      }
+
+      // Connecting trail-to-head live segment: from the previous waypoint
+      // to the MEOS-interpolated head position. (skipped for point-only datasets)
+      if (!tr.isPointOnly) {
+        const cprev = tr.coords[i];
+        if (Array.isArray(cprev)) {
+          const [sx, sy] = project(cprev[0], cprev[1]);
+          ctx.strokeStyle = 'rgba(11, 31, 58, .85)';
+          ctx.lineWidth = 2.4;
+          ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(px, py); ctx.stroke();
+        }
+      }
+
+      // Head glow
+      const grad = ctx.createRadialGradient(px, py, 0, px, py, 22);
+      grad.addColorStop(0, 'rgba(184, 58, 29, .55)');
+      grad.addColorStop(1, 'rgba(184, 58, 29, 0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath(); ctx.arc(px, py, 22, 0, Math.PI * 2); ctx.fill();
+
+      // Head marker
+      ctx.fillStyle = tr.color;
+      ctx.strokeStyle = '#f2ead8';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(px, py, 5.2, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+      // Ring pulse every few seconds
+      const pulse = ((now / 1200) + tr.phaseOffset * 6) % 1;
+      if (pulse > 0.5) {
+        const pr = (pulse - 0.5) * 30;
+        ctx.strokeStyle = `rgba(184, 58, 29, ${0.4 * (1 - (pulse - 0.5) / 0.5)})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(px, py, pr, 0, Math.PI * 2); ctx.stroke();
+      }
+    }
+
+    // Closest pair highlight — a single red connector between the two
+    // entities MEOS identified as having minimal nearest-approach distance.
+    if (closestPair && closestPair.a.handle && closestPair.b.handle) {
+      const phaseA = ((simT / 18) + closestPair.a.phaseOffset) % 1;
+      const phaseB = ((simT / 18) + closestPair.b.phaseOffset) % 1;
+      const tA = closestPair.a.startMs + phaseA * (closestPair.a.endMs - closestPair.a.startMs);
+      const tB = closestPair.b.startMs + phaseB * (closestPair.b.endMs - closestPair.b.startMs);
+      if (valueAtFn(closestPair.a.handle, tA, frameOutPtr)) {
+        meosCallsThisFrame++;
+        const ax = Module.HEAPF64[frameOutIdx], ay = Module.HEAPF64[frameOutIdx + 1];
+        if (valueAtFn(closestPair.b.handle, tB, frameOutPtr)) {
+          meosCallsThisFrame++;
+          const bxv = Module.HEAPF64[frameOutIdx], byv = Module.HEAPF64[frameOutIdx + 1];
+          const [pax, pay] = project(ax, ay);
+          const [pbx, pby] = project(bxv, byv);
+          ctx.save();
+          ctx.strokeStyle = 'rgba(184, 58, 29, .7)';
+          ctx.lineWidth = 1.4;
+          ctx.setLineDash([4, 4]);
+          ctx.beginPath(); ctx.moveTo(pax, pay); ctx.lineTo(pbx, pby); ctx.stroke();
+          ctx.restore();
+          // NAD label
+          ctx.fillStyle = 'var(--accent)';
+          ctx.font = "italic 11px Fraunces, serif";
+          ctx.fillText(`nad = ${closestPair.dist.toExponential(2)}°`,
+                       (pax + pbx)/2 + 6, (pay + pby)/2 - 6);
+        }
+      }
+    }
+
+    // Clock update
+    const totalSec = 3 * 3600; // conceptual
+    const clockSec = Math.floor((simT * 250) % totalSec);
+    const hh = String(Math.floor(clockSec / 3600)).padStart(2, '0');
+    const mm = String(Math.floor(clockSec / 60) % 60).padStart(2, '0');
+    hud.clock.textContent = `${hh}:${mm}`;
+
+    requestAnimationFrame(draw);
+  }
+
+  // ── Terminal ticker ──────────────────────────────────────────────────
+  let termLines = [];
+  function termLog(html) {
+    termLines.push(html);
+    if (termLines.length > 14) termLines.shift();
+    term.innerHTML = termLines.map(l => `<div class="line">${l}</div>`).join('');
+  }
+  const stamp = () => {
+    const d = new Date();
+    return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}.${String(d.getMilliseconds()).padStart(3,'0')}`;
+  };
+
+  // ── MEOS integration ─────────────────────────────────────────────────
+  let Module, parseFn, createHandle, destroyHandle, valueAtFn, frameOutPtr, frameOutIdx;
+  let closestPair = null;
+
+  (async () => {
+    try {
+      const t0 = performance.now();
+      termLog(`<span class="t">${stamp()}</span> boot        <span class="ok">createMeos()</span> …`);
+      window.__meosErrors = [];
+      window.addEventListener('error', e => {
+        const x = e.error || e;
+        window.__meosErrors.push((x && (x.stack || x.message)) || String(x));
+      });
+      window.addEventListener('unhandledrejection', e => {
+        const x = e.reason || e;
+        window.__meosErrors.push((x && (x.stack || x.message)) || String(x));
+      });
+      Module = await createMeos({ locateFile: p => p });
+      window.__meosModule = Module;
+      // Wire the auto-generated façade. After this call, MEOS.tpoint_length(h),
+      // MEOS.nad_tgeo_tgeo(a, b), MEOS.tspatial_transform(t, srid), etc. are
+      // all live — every public MEOS function is callable by its real C name.
+      MEOS.bindModule(Module);
+      window.__meosFacadeCount = Object.keys(MEOS).filter(k => typeof MEOS[k] === 'function' && !k.startsWith('__') && k !== 'bindModule' && k !== 'free' && k !== 'temporal_destroy_safe').length;
+      buildSampleLibrary();
+      parseFn = (wkt) => Module.ccall('meos_parse_tgeompoint', 'string', ['string'], [wkt]);
+      // Under MEMORY64=1 pointers are 64-bit. ccall's 'pointer' arg/return
+      // type transparently wraps/unwraps BigInt so JS code stays clean.
+      createHandle = (wkt) => Module.ccall('meos_tgeompoint_create', 'pointer', ['string'], [wkt]) || 0;
+      destroyHandle = (h) => { if (h) Module.ccall('meos_temporal_destroy', null, ['pointer'], [h]); };
+      frameOutPtr = Module._malloc(16n);  // _malloc takes/returns BigInt under wasm64
+      frameOutIdx = Number(frameOutPtr) / 8;
+      // cwrap the hot path once: avoids ccall's per-call lookup overhead.
+      valueAtFn = Module.cwrap('meos_tgeompoint_value_at', 'number',
+                               ['pointer', 'number', 'pointer']);
+      Module.ccall('meos_start', null, [], []);
+      const t1 = performance.now();
+      termLog(`<span class="t">${stamp()}</span> wasm64 ok   <span class="ok">${(t1-t0).toFixed(0)}ms</span> boot · pointers = <span class="n">BigInt</span>`);
+      try {
+        const ver = Module.ccall('meos_version_string', 'string', [], []);
+        if (ver) $('#meta-version').textContent = ver;
+        termLog(`<span class="t">${stamp()}</span> ${ver}`);
+      } catch {}
+      buildDatasets();
+      // Initialise Leaflet base map
+      lmap = L.map('leaflet-map', {
+        zoomControl: true, attributionControl: true, preferCanvas: true,
+      }).setView([50.85, 4.36], 12);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        maxZoom: 19, subdomains: 'abcd',
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a> · <a href="https://carto.com/attributions">CARTO</a>',
+      }).addTo(lmap);
+      lmap.on('move zoom moveend zoomend', () => { /* canvas re-renders next frame */ });
+      lmap.on('resize', () => resizeCanvas());
+      window.lmap = lmap;
+      await loadDataset(DATASETS[0]);
+      fmtParse();
+      curtain.classList.add('hidden');
+      requestAnimationFrame(draw);
+      setInterval(updateHeap, 1500);
+    } catch (e) {
+      curtain.innerHTML = `<div style="max-width:340px;text-align:center;line-height:1.6;">
+        <b>wasm64 initialisation failed</b><br><br>
+        <span style="font-family:Fraunces,serif;font-style:italic;text-transform:none;letter-spacing:0;color:var(--accent)">${e.message}</span><br><br>
+        <span style="text-transform:none;letter-spacing:0;font-family:Fraunces,serif;font-size:12px;">Needs Chrome / Firefox / Safari with Memory64 enabled.</span>
+      </div>`;
+    }
+  })();
+
+  // ── Dataset building ─────────────────────────────────────────────────
+  function buildDatasets() {
+    DATASETS.forEach((d, i) => {
+      const b = el('button', { className: 'dataset' + (i === 0 ? ' active' : '') });
+      b.innerHTML = `<span class="t">${d.title}</span><span class="s">${d.subtitle}</span>`;
+      b.addEventListener('click', () => {
+        document.querySelectorAll('.dataset').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        loadDataset(d);
+      });
+      datasetsEl.appendChild(b);
+    });
+  }
+
+  async function loadDataset(d) {
+    currentDataset = d;
+    plotTitle.textContent = d.plotTitle;
+    termLog(`<span class="t">${stamp()}</span> <span class="ok">field</span> → ${d.title} · generating ${d.count} WKT strings…`);
+    const t0 = performance.now();
+    let totalBytes = 0, totalPts = 0, totalParse = 0, totalLength = 0;
+    const swarm = [];
+    const bboxScratch = Module._malloc(32n);  // 4 × f64 for xmin/ymin/xmax/ymax
+    const bboxOff = Number(bboxScratch) / 8;
+    if (d.kind === 'stib') {
+      // Fetch today's STIB MF-JSON FeatureCollection and parse each
+      // feature\'s temporalGeometry directly via tgeompoint_from_mfjson.
+      termLog(`<span class="t">${stamp()}</span> <span class="ok">stib</span> fetching ${d.url}…`);
+      let feats;
+      try {
+        const r = await fetch(d.url);
+        const j = await r.json();
+        feats = (j.features || []).slice(0, d.maxCount || 1000);
+        termLog(`<span class="t">${stamp()}</span>  loaded <span class="ok">${feats.length}</span> features (${(JSON.stringify(j).length/1e6).toFixed(1)}MB)`);
+      } catch (e) {
+        termLog(`<span class="t">${stamp()}</span>  fetch failed: ${e.message}`);
+        Module._free(bboxScratch);
+        return;
+      }
+      for (let i = 0; i < feats.length; i++) {
+        const feat  = feats[i];
+        const tg    = feat.temporalGeometry;
+        const props = feat.properties || {};
+        if (!tg) continue;
+        // MEOS\'s MF-JSON parser is stricter than the spec: it wants
+        //   - no fractional seconds
+        //   - tz suffix as "+00" not "Z" or "+00:00"
+        //   - explicit "interpolation" + lower_inc/upper_inc when sequence
+        const cleanTimes = (tg.datetimes || []).map(t =>
+          t.replace(/\.\d+/, '').replace(/Z$/, '+00').replace(/([+-]\d{2}):?(\d{2})$/, '$1')
+        );
+        const mfjson = JSON.stringify(Object.assign({}, tg, {
+          datetimes: cleanTimes,
+          interpolation: tg.interpolation || 'Linear',
+          lower_inc: true, upper_inc: true,
+        }));
+        const p0 = performance.now();
+        const handle = MEOS.tgeompoint_from_mfjson(mfjson);
+        const p1 = performance.now();
+        if (!handle) continue;
+        totalParse += (p1 - p0);
+        const startMs = MEOS.temporal_start_timestamptz
+          ? Number(MEOS.temporal_start_timestamptz(handle)) / 1000 + 946684800000
+          : Module.ccall('meos_temporal_start_epoch_ms', 'number', ['pointer'], [handle]);
+        const endMs = Module.ccall('meos_temporal_end_epoch_ms', 'number', ['pointer'], [handle]);
+        const ninst = MEOS.temporal_num_instants(handle);
+        // Trajectory polyline via MEOS.
+        const gj = MEOS.geo_as_geojson(MEOS.tpoint_trajectory(handle, false), 0, 6, 0);
+        let coords = [];
+        try { coords = JSON.parse(gj).coordinates || []; } catch {}
+        const entityLength = MEOS.tpoint_length(handle);
+        totalLength += entityLength;
+        totalPts += ninst;
+        totalBytes += mfjson.length;
+        swarm.push({
+          id: i,
+          name: `Line ${props.lineId || '?'} · ${(props.uuid || '').slice(0, 6)}`,
+          coords, times: tg.datetimes || [],
+          bytes: mfjson.length, parseMs: (p1 - p0),
+          color: props.color || '#b83a1d',
+          phaseOffset: Math.random(),
+          handle, startMs, endMs, interp: 'Linear', isRegion: false, isPointOnly: true,
+          simpHandle: null, origInstants: ninst, entityLength,
+        });
+      }
+      // Skip the procedural loop entirely.
+      d.count = swarm.length;
+    } else
+    for (let i = 0; i < d.count; i++) {
+      const wktObj = makeWKT(d.kind, i + 1, d.center, d.spread);
+      const wkt = wktObj.wkt;
+      let json, handleOverride = null, coordsOverride = null, timesOverride = null;
+      const p0 = performance.now();
+      if (d.kind === 'region') {
+        // tgeometry_in doesn't round-trip via MF-JSON (it's a point format),
+        // so skip as_mfjson and use the centroid path for bbox computation.
+        const { wkt: regionWkt, centroids, times } = makeWKT(d.kind, i + 1, d.center, d.spread);
+        const h = Module.ccall('meos_tgeometry_create', 'pointer', ['string'], [regionWkt]);
+        if (!h) { continue; }
+        handleOverride = h;
+        coordsOverride = centroids;
+        timesOverride  = times;
+        // Fake a minimal MF-JSON-ish object with centroid coordinates so the
+        // downstream parsing logic finds something sensible.
+        json = JSON.stringify({ type: 'MovingRegion', coordinates: centroids, datetimes: times });
+      } else if (d.kind === 'mfjson') {
+        // First build an MF-JSON document via MEOS, then ingest it via
+        // temporal_from_mfjson — a full MF-JSON ↔ Temporal* round trip.
+        const seed  = parseFn(wkt);
+        const h     = seed ? Module.ccall('meos_tgeompoint_from_mfjson', 'pointer', ['string'], [seed]) : 0;
+        if (!h) { continue; }
+        handleOverride = h;
+        json = seed;
+      } else {
+        json = parseFn(wkt);
+      }
+      const p1 = performance.now();
+      totalParse += (p1 - p0);
+      if (!json) continue;
+      totalBytes += json.length;
+      const o = JSON.parse(json);
+      // For regions, `o.coordinates` holds polygon rings; flatten to vertices
+      // so bbox computation sees the full footprint. For points it's already [x,y].
+      const coords = (function () {
+        const flat = [];
+        const walk = (node) => {
+          if (!Array.isArray(node)) return;
+          if (typeof node[0] === 'number') { flat.push([node[0], node[1]]); return; }
+          for (const c of node) walk(c);
+        };
+        walk(o.coordinates || o.sequences || []);
+        return flat;
+      })();
+      const times  = (o.datetimes || []).slice();
+      totalPts += coords.length;
+      const handle  = handleOverride || createHandle(wkt);
+      let finalCoords = coordsOverride || coords;
+      const finalTimes  = timesOverride  || times;
+      const startMs = handle ? Module.ccall('meos_temporal_start_epoch_ms', 'number', ['pointer'], [handle]) : 0;
+      const endMs   = handle ? Module.ccall('meos_temporal_end_epoch_ms',   'number', ['pointer'], [handle]) : 0;
+      const interp  = handle ? Module.ccall('meos_temporal_interp_name',    'string', ['pointer'], [handle]) : '';
+      const isRegion = d.kind === 'region';
+
+      // ── MEOS-native analytics: trajectory + bbox + length ──
+      let entityLength = 0;
+      if (handle && !isRegion) {
+        // Ask MEOS for the trajectory as a GeoJSON LineString, parse once.
+        const trajGj = Module.ccall('meos_tpoint_trajectory_geojson', 'string',
+                                    ['pointer', 'number'], [handle, 6]);
+        if (trajGj) {
+          try {
+            const g = JSON.parse(trajGj);
+            if (g.type === 'LineString' && Array.isArray(g.coordinates)) {
+              finalCoords = g.coordinates;
+            }
+          } catch {}
+        }
+        // Fleet-scale length sum (SRID-native units — degrees for 4326).
+        entityLength = MEOS.tpoint_length(handle);
+        totalLength += entityLength;
+      }
+
+      swarm.push({
+        id: i,
+        name: (d.names && d.names[i]) || `${d.kind}-${String(i + 1).padStart(3, '0')}`,
+        coords: finalCoords, times: finalTimes,
+        bytes: json.length,
+        parseMs: (p1 - p0),
+        color: d.accent,
+        phaseOffset: Math.random(),
+        handle, startMs, endMs, interp, isRegion,
+        simpHandle: null,
+        origInstants: handle ? Module.ccall('meos_temporal_num_instants', 'number', ['pointer'], [handle]) : 0,
+        entityLength,
+      });
+      if (i < 4) {
+        termLog(`<span class="t">${stamp()}</span>  parse <span class="ok">${(p1-p0).toFixed(2)}ms</span> · ${coords.length} pts · ${json.length}B <span class="n">MF-JSON</span>`);
+      }
+    }
+    const t1 = performance.now();
+    // Release handles from the prior field (single pass, includes any
+    // simplified + tdistance handles spawned via the sliders).
+    for (const prev of currentSwarm) {
+      if (prev.handle) destroyHandle(prev.handle);
+      if (prev.simpHandle) destroyHandle(prev.simpHandle);
+    }
+    if (distancePair && distancePair.tdist) { destroyHandle(distancePair.tdist); distancePair = null; }
+    currentSwarm = swarm;
+    // Union the STBox across all handles via MEOS.
+    let ux=Infinity,uX=-Infinity,uy=Infinity,uY=-Infinity;
+    for (const tr of swarm) {
+      if (!tr.handle) continue;
+      const ok = Module.ccall('meos_tspatial_bbox', 'number',
+                              ['pointer', 'pointer'], [tr.handle, bboxScratch]);
+      if (!ok) continue;
+      const xm = Module.HEAPF64[bboxOff],     ym = Module.HEAPF64[bboxOff + 1];
+      const xM = Module.HEAPF64[bboxOff + 2], yM = Module.HEAPF64[bboxOff + 3];
+      if (xm<ux) ux=xm; if (xM>uX) uX=xM; if (ym<uy) uy=ym; if (yM>uY) uY=yM;
+    }
+    Module._free(bboxScratch);
+    if (isFinite(ux)) {
+      const w=uX-ux||1, h=uY-uy||1, r=Math.max(w,h), cx=(ux+uX)/2, cy=(uy+uY)/2;
+      bbox = { minX: cx - r/2 * 1.08, maxX: cx + r/2 * 1.08,
+               minY: cy - r/2 * 1.08, maxY: cy + r/2 * 1.08 };
+    } else {
+      bbox = computeBBox(swarm);  // fallback for regions
+    }
+    drawStatic();
+    simT = 0;
+
+    // Pairwise nearest-approach distance — pure MEOS, O(n²).
+    // Skip for huge swarms (n > 80) to keep load times reasonable.
+    let minNad = Infinity, nadA = -1, nadB = -1, nadTime = 0;
+    const pointSwarm = swarm.filter(tr => tr.handle && !tr.isRegion);
+    const tPair = performance.now();
+    const NAD_LIMIT = 80;
+    const nadN = Math.min(pointSwarm.length, NAD_LIMIT);
+    for (let a = 0; a < nadN; a++) {
+      for (let b = a + 1; b < nadN; b++) {
+        const dist = Module.ccall('meos_nad_tgeo_tgeo', 'number',
+                                  ['pointer', 'pointer'],
+                                  [pointSwarm[a].handle, pointSwarm[b].handle]);
+        if (dist >= 0 && dist < minNad) {
+          minNad = dist; nadA = a; nadB = b;
+        }
+      }
+    }
+    const pairMs = performance.now() - tPair;
+    if (nadA >= 0) {
+      nadTime = Module.ccall('meos_nai_tgeo_tgeo_ms', 'number',
+                             ['pointer', 'pointer'],
+                             [pointSwarm[nadA].handle, pointSwarm[nadB].handle]);
+    }
+    closestPair = (nadA >= 0) ? {
+      a: pointSwarm[nadA], b: pointSwarm[nadB],
+      dist: minNad, nameA: pointSwarm[nadA].name, nameB: pointSwarm[nadB].name,
+      nadTime,
+    } : null;
+    termLog(`<span class="t">${stamp()}</span> <span class="ok">nad</span> best pair dist=<span class="n">${minNad === Infinity ? '—' : minNad.toExponential(2)}</span> (${(pairMs).toFixed(1)}ms, ${(pointSwarm.length*(pointSwarm.length-1)/2)} pairs)`);
+
+    hud.traj.textContent  = fmtN(swarm.length);
+    hud.length.innerHTML  = `${totalLength.toFixed(3)}<small>°</small>`;
+    hud.nad.innerHTML     = closestPair
+      ? `${closestPair.dist.toExponential(2)}<small>° · ${closestPair.nameA.slice(0, 9)}↔${closestPair.nameB.slice(0, 9)}</small>`
+      : `—`;
+    hud.parse.innerHTML   = `${totalParse.toFixed(2)}<small>ms · ${fmtN(totalBytes/1024)}KiB</small>`;
+
+    // Register the swarm handles in the function explorer so the user
+    // can pick any entity as a pointer argument. Sample handles (isSample)
+    // are persistent — only drop swarm-linked ones here.
+    for (const [k, v] of Array.from(fnHandles.entries())) {
+      if (!v.isSample) fnHandles.delete(k);
+    }
+    fnHandleSeq = 0;
+    const slug = (currentDataset && currentDataset.id) || 'h';
+    swarm.forEach((tr, i) => {
+      if (!tr.handle || tr.isRegion) return;
+      fnHandles.set(`${slug}_${i}`, {
+        ptr: tr.handle, type: 'Temporal *', label: tr.name,
+      });
+    });
+    if (typeof renderFnForm === 'function' && fnCurrent) renderFnForm(fnCurrent);
+    termLog(`<span class="t">${stamp()}</span> <span class="ok">field ready</span> · ${swarm.length} trajectories · ${totalPts} pts · ${(totalParse).toFixed(2)}ms total · avg <span class="n">${(totalParse/swarm.length).toFixed(3)}ms</span>`);
+  }
+
+  function renderList() {
+    trajList.innerHTML = '';
+    entitiesHint.textContent = `${currentSwarm.length} live`;
+    for (const tr of currentSwarm) {
+      const row = el('div', { className: 'row' });
+      row.innerHTML = `<span class="id">${String(tr.id+1).padStart(3,'0')}</span><span class="name">${tr.name}</span><span class="pts">${tr.coords.length}pt</span><span class="swatch" style="background:${tr.color}"></span>`;
+      trajList.appendChild(row);
+    }
+  }
+
+  function updateHeap() {
+    if (!Module || !Module.HEAPU8) return;
+    const bytes = Module.HEAPU8.length;
+    hud.heap.innerHTML = `${(bytes / (1024*1024)).toFixed(1)}<small>MiB</small>`;
+  }
+
+  // ── Controls ─────────────────────────────────────────────────────────
+  btnPlay.addEventListener('click', () => {
+    playing = !playing;
+    btnPlay.textContent = playing ? '▸ Play' : '❚❚ Pause';
+  });
+  btnReparse.addEventListener('click', () => {
+    if (!parseFn) return;
+    termLog(`<span class="t">${stamp()}</span> <span class="ok">re-parse</span> ${currentDataset.title}`);
+    loadDataset(currentDataset);
+  });
+  spSpeed.addEventListener('input', () => {
+    speed = +spSpeed.value;
+    spSpeedV.textContent = speed.toFixed(2) + '×';
+  });
+
+  // ── Simplify slider: temporal_simplify_dp on every entity. We keep
+  //    an array of simplified handles parallel to the originals and use
+  //    those as the trajectory source when eps > 0.
+  const spEps = document.getElementById('sp-eps');
+  const spEpsV = document.getElementById('sp-eps-v');
+  spEps.addEventListener('input', () => {
+    const eps = +spEps.value;
+    spEpsV.textContent = eps === 0 ? 'off' : eps.toFixed(4);
+    applySimplify(eps);
+  });
+  function applySimplify(eps) {
+    if (!currentSwarm.length) return;
+    let origInstants = 0, simInstants = 0;
+    for (const tr of currentSwarm) {
+      if (tr.simpHandle) {
+        destroyHandle(tr.simpHandle); tr.simpHandle = null;
+      }
+      if (!tr.handle || tr.isRegion) continue;
+      origInstants += (tr.origInstants || 0);
+      if (eps === 0) continue;
+      const sh = Module.ccall('meos_temporal_simplify_dp', 'pointer',
+                              ['pointer', 'number', 'number'], [tr.handle, eps, 1]);
+      if (sh) {
+        tr.simpHandle = sh;
+        const gj = Module.ccall('meos_tpoint_trajectory_geojson', 'string',
+                                ['pointer', 'number'], [sh, 6]);
+        try {
+          const g = JSON.parse(gj);
+          if (g.type === 'LineString') tr.coords = g.coordinates;
+        } catch {}
+        simInstants += Module.ccall('meos_temporal_num_instants', 'number', ['pointer'], [sh]);
+      }
+    }
+    if (eps > 0) {
+      termLog(`<span class="t">${stamp()}</span> <span class="ok">simplify_dp</span> ε=${eps.toFixed(4)} · ${simInstants}/${origInstants} instants retained`);
+    } else {
+      // Restore original paths
+      for (const tr of currentSwarm) {
+        if (!tr.handle || tr.isRegion) continue;
+        const gj = Module.ccall('meos_tpoint_trajectory_geojson', 'string',
+                                ['pointer', 'number'], [tr.handle, 6]);
+        try { tr.coords = JSON.parse(gj).coordinates; } catch {}
+      }
+    }
+  }
+
+  // ── Distance sparkline (between two user-selected entities) ───────
+  const spDist = document.getElementById('sp-dist');
+  const spDistV = document.getElementById('sp-dist-v');
+  let distancePair = null;
+  spDist.addEventListener('input', () => {
+    const k = +spDist.value;
+    spDistV.textContent = k === 0 ? 'off' : `#${k}`;
+    setupDistancePair(k);
+  });
+  function setupDistancePair(k) {
+    // Clean up any previous pair
+    if (distancePair && distancePair.tdist) {
+      destroyHandle(distancePair.tdist);
+    }
+    distancePair = null;
+    if (k === 0 || !currentSwarm.length) return;
+    const pts = currentSwarm.filter(tr => tr.handle && !tr.isRegion);
+    if (pts.length < 2) return;
+    const a = pts[0], b = pts[Math.min(k, pts.length - 1)];
+    const td = Module.ccall('meos_tdistance_tgeo_tgeo', 'pointer',
+                            ['pointer', 'pointer'], [a.handle, b.handle]);
+    if (!td) return;
+    const dmin = Module.ccall('meos_tfloat_min', 'number', ['pointer'], [td]);
+    const dmax = Module.ccall('meos_tfloat_max', 'number', ['pointer'], [td]);
+    distancePair = { a, b, tdist: td, dmin, dmax };
+    termLog(`<span class="t">${stamp()}</span> <span class="ok">tdistance</span> ${a.name}↔${b.name} · min=<span class="n">${dmin.toExponential(2)}</span>  max=<span class="n">${dmax.toExponential(2)}</span>`);
+  }
+
+  window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
+
+  // ── Format Lab ────────────────────────────────────────────────────
+  // User-pasted input in any MEOS format (WKT, MF-JSON, HexWKB) is
+  // auto-detected and parsed via meos_parse_any, then round-tripped
+  // through temporal_as_mfjson + temporal_as_hexwkb for inspection.
+  const fmtIn   = document.getElementById('fmt-in');
+  const fmtOut  = document.getElementById('fmt-out');
+  const fmtHint = document.getElementById('fmt-hint');
+  const fmtParseBtn = document.getElementById('fmt-parse');
+  const fmtRtBtn    = document.getElementById('fmt-roundtrip');
+
+  function fmtEscape(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function fmtRender(head, body, kind) {
+    const color = { wkt:'var(--accent)', mfjson:'var(--ok)', hexwkb:'var(--gold)', unknown:'var(--tick)' }[kind] || 'var(--tick)';
+    fmtOut.innerHTML = `<div style="color:${color};font-family:'Fraunces',serif;font-style:italic;font-size:12px;margin-bottom:4px;">${head}</div>${body}`;
+  }
+
+  function fmtParse() {
+    if (!Module) return;
+    const input = fmtIn.value.trim();
+    if (!input) { fmtOut.textContent = 'empty input'; return; }
+    const fmt = Module.ccall('meos_detect_format_name', 'string', ['string'], [input]);
+    const t0 = performance.now();
+    const handle = Module.ccall('meos_parse_any', 'pointer', ['string'], [input]);
+    const t1 = performance.now();
+    if (!handle) {
+      fmtRender(`${fmt} · parse failed`, '<code>meos_parse_any returned NULL</code>', 'unknown');
+      return;
+    }
+    const desc = Module.ccall('meos_temporal_describe', 'string', ['pointer'], [handle]);
+    let descObj = {};
+    try { descObj = JSON.parse(desc || '{}'); } catch {}
+    const mfjson = Module.ccall('meos_temporal_as_mfjson', 'string', ['pointer','number'], [handle, 6]);
+    const hex    = Module.ccall('meos_temporal_as_hexwkb', 'string', ['pointer'], [handle]);
+    const ewkt   = Module.ccall('meos_temporal_as_ewkt', 'string', ['pointer','number'], [handle, 6]);
+    Module.ccall('meos_temporal_destroy', null, ['pointer'], [handle]);
+
+    const startDate = descObj.startMs ? new Date(descObj.startMs).toISOString().slice(0, 19) : '—';
+    const endDate   = descObj.endMs   ? new Date(descObj.endMs).toISOString().slice(0, 19)   : '—';
+    const body = `
+      <div style="margin:2px 0 6px;color:var(--ink);"><b>detected</b> <span style="color:var(--accent)">${fmt}</span> &nbsp;·&nbsp; <b>parsed</b> ${(t1-t0).toFixed(2)}ms &nbsp;·&nbsp; <b>${descObj.instants||0}</b> instants &nbsp;·&nbsp; <b>srid</b> ${descObj.srid||0}</div>
+      <div style="color:var(--tick)">${startDate} → ${endDate}</div>
+      <details style="margin-top:6px;"><summary style="cursor:pointer;color:var(--accent);font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase">EWKT</summary><pre style="margin:4px 0;white-space:pre-wrap;color:var(--ink);">${fmtEscape(ewkt || '')}</pre></details>
+      <details><summary style="cursor:pointer;color:var(--accent);font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase">MF-JSON</summary><pre style="margin:4px 0;white-space:pre-wrap;color:var(--ink);max-height:160px;overflow:auto;">${fmtEscape((mfjson || '').slice(0, 2000))}${(mfjson || '').length > 2000 ? '…' : ''}</pre></details>
+      <details><summary style="cursor:pointer;color:var(--accent);font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase">HexWKB</summary><pre style="margin:4px 0;white-space:pre-wrap;color:var(--ink);word-break:break-all;">${fmtEscape((hex || '').slice(0, 400))}${(hex || '').length > 400 ? '…' : ''}</pre></details>`;
+    fmtRender(`ok · handle introspected`, body, fmt);
+  }
+
+  function fmtRoundTrip() {
+    // Convert whatever is in the textarea to HexWKB and paste it back —
+    // demonstrates the write path in addition to the read path.
+    if (!Module) return;
+    const input = fmtIn.value.trim();
+    if (!input) return;
+    const h = Module.ccall('meos_parse_any', 'pointer', ['string'], [input]);
+    if (!h) { fmtOut.textContent = 'parse failed'; return; }
+    const hex = Module.ccall('meos_temporal_as_hexwkb', 'string', ['pointer'], [h]);
+    Module.ccall('meos_temporal_destroy', null, ['pointer'], [h]);
+    if (hex) { fmtIn.value = hex; fmtParse(); }
+  }
+
+  // ── Function Explorer ─────────────────────────────────────────────
+  // Auto-generated manifest powers a searchable, categorised browser
+  // over the entire MEOS public API.
+  const fnSearch    = document.getElementById('fn-search');
+  const fnCategory  = document.getElementById('fn-category');
+  const fnList      = document.getElementById('fn-list');
+  const fnForm      = document.getElementById('fn-form');
+  const fnRunBtn    = document.getElementById('fn-run');
+  const fnSampleBtn = document.getElementById('fn-sample');
+  const fnResult    = document.getElementById('fn-result');
+  const fnCount     = document.getElementById('fn-count');
+  let fnManifest = null;
+  let fnNames    = [];
+  let fnCurrent  = null;
+  // Registry of named handles the explorer can pass to ccall'd functions.
+  // Each entry: { ptr: number, type: 'Temporal*' | 'STBox*' | 'GSERIALIZED*' | …, label: string }
+  let fnHandles  = new Map();
+  let fnHandleSeq = 0;
+  function fnAddHandle(label, ptr, type) {
+    if (!ptr) return null;
+    const name = (label || 'h') + (++fnHandleSeq);
+    fnHandles.set(name, { ptr, type, label: label || name });
+    return name;
+  }
+  function fnSetHandle(name, ptr, type, label) {
+    if (!ptr) return null;
+    fnHandles.set(name, { ptr, type, label: label || name });
+    return name;
+  }
+  // Library of persistent sample handles that live independently of any
+  // dataset. Populated once at boot so every function explorer pointer
+  // dropdown has sensible options before the user has loaded anything.
+  const SAMPLE_LIB = [
+    { name: 'sample_tgeompoint',   type: 'Temporal *',    label: 'taxi — linear 3-pt',
+      call: 'tgeompoint_in',   input: '[POINT(4.36 50.84)@2026-04-14 09:00:00, POINT(4.42 50.88)@2026-04-14 09:20:00, POINT(4.50 50.85)@2026-04-14 09:45:00]' },
+    { name: 'sample_tgeompoint_2', type: 'Temporal *',    label: 'taxi — second path',
+      call: 'tgeompoint_in',   input: '[POINT(4.38 50.86)@2026-04-14 09:00:00, POINT(4.46 50.87)@2026-04-14 09:15:00, POINT(4.52 50.84)@2026-04-14 09:40:00]' },
+    { name: 'sample_tgeompoint_disc', type: 'Temporal *', label: 'discrete point set',
+      call: 'tgeompoint_in',   input: '{POINT(4.36 50.84)@2026-04-14 09:00:00, POINT(4.50 50.88)@2026-04-14 09:30:00}' },
+    { name: 'sample_tgeompoint_inst', type: 'Temporal *', label: 'single instant',
+      call: 'tgeompoint_in',   input: 'POINT(4.36 50.84)@2026-04-14 09:00:00' },
+    { name: 'sample_tgeometry',    type: 'Temporal *',    label: 'moving polygon',
+      call: 'tgeometry_in',    input: '[POLYGON((4.36 50.84, 4.38 50.84, 4.38 50.86, 4.36 50.86, 4.36 50.84))@2026-04-14 09:00:00, POLYGON((4.40 50.85, 4.42 50.85, 4.42 50.87, 4.40 50.87, 4.40 50.85))@2026-04-14 09:30:00]' },
+    { name: 'sample_tfloat',       type: 'Temporal *',    label: 'tfloat 3-pt',
+      call: 'tfloat_in',       input: '[1.0@2026-04-14 09:00:00, 3.5@2026-04-14 09:20:00, 2.2@2026-04-14 09:45:00]' },
+    { name: 'sample_tint',         type: 'Temporal *',    label: 'tint step',
+      call: 'tint_in',         input: 'Interp=Step;[5@2026-04-14 09:00:00, 12@2026-04-14 09:30:00]' },
+    { name: 'sample_stbox',        type: 'STBox *',       label: 'Brussels bbox',
+      call: 'stbox_in',        input: 'STBOX X((4.30, 50.80),(4.50, 50.90))' },
+    { name: 'sample_tstzspan',     type: 'Span *',        label: 'morning span',
+      call: 'tstzspan_in',     input: '[2026-04-14 08:00:00, 2026-04-14 12:00:00]' },
+    { name: 'sample_floatspan',    type: 'Span *',        label: 'float span 0..10',
+      call: 'floatspan_in',    input: '[0, 10]' },
+    { name: 'sample_floatset',     type: 'Set *',         label: 'float set',
+      call: 'floatset_in',     input: '{1.5, 2.5, 3.5}' },
+    { name: 'sample_intset',       type: 'Set *',         label: 'int set',
+      call: 'intset_in',       input: '{1, 2, 3, 5, 8, 13}' },
+    { name: 'sample_tstzset',      type: 'Set *',         label: 'timestamp set',
+      call: 'tstzset_in',      input: '{2026-04-14 09:00:00, 2026-04-14 09:30:00, 2026-04-14 10:00:00}' },
+    { name: 'sample_geomset',      type: 'Set *',         label: 'geometry set',
+      call: 'geomset_in',      input: '{POINT(4.36 50.84), POINT(4.50 50.88)}' },
+    { name: 'sample_point_geom',   type: 'GSERIALIZED *', label: 'static Brussels pt',
+      call: 'geom_in',         input: 'POINT(4.36 50.84)', extraArgs: [-1] },
+    { name: 'sample_polygon_geom', type: 'GSERIALIZED *', label: 'static polygon',
+      call: 'geom_in',         input: 'POLYGON((4.30 50.80, 4.50 50.80, 4.50 50.90, 4.30 50.90, 4.30 50.80))', extraArgs: [-1] },
+  ];
+
+  function buildSampleLibrary() {
+    let ok = 0, fail = 0;
+    for (const entry of SAMPLE_LIB) {
+      try {
+        let ptr;
+        if (typeof MEOS[entry.call] === 'function') {
+          ptr = MEOS[entry.call](entry.input, ...(entry.extraArgs || []));
+        }
+        if (ptr && typeof ptr === 'number') {
+          fnHandles.set(entry.name, { ptr, type: entry.type, label: entry.label, isSample: true });
+          ok++;
+        } else { fail++; }
+      } catch (e) { fail++; }
+    }
+    termLog(`<span class="t">${stamp()}</span> <span class="ok">samples</span> loaded · <b>${ok}</b> handles ready in explorer` + (fail ? ` · ${fail} failed` : ''));
+  }
+
+  // ── Coverage runner ────────────────────────────────────────────
+  //
+  // Walks every function in the manifest, picks the most appropriate
+  // sample handle for each pointer argument (matching by C type), sane
+  // defaults for scalars, and records the outcome. Used by test/coverage.py.
+  window.__runCoverage = async function runCoverage(opts) {
+    opts = opts || {};
+    if (!window.__meosManifest) {
+      const r = await fetch('./meos-api.json');
+      window.__meosManifest = await r.json();
+    }
+    const manifest = window.__meosManifest;
+    // Make sure the sample library is loaded and has handles.
+    if ([...fnHandles.values()].filter(h => h.isSample).length === 0) {
+      buildSampleLibrary();
+    }
+
+    // Group samples by C type for quick lookup.
+    const samples = {};
+    for (const [name, h] of fnHandles.entries()) {
+      if (!h.isSample) continue;
+      (samples[h.type] = samples[h.type] || []).push(h);
+    }
+    const anyTemporal = samples['Temporal *'] || [];
+
+    // Scalar defaults by C type token.
+    const scalar = (ct) => {
+      ct = (ct || '').replace(/const/g, '').trim();
+      if (ct.match(/^(double|float|long double)$/)) return 0.5;
+      if (ct.match(/^(int|int8|int16|int32|int64|uint8|uint16|uint32|uint64|size_t|ssize_t|ptrdiff_t|short|long|unsigned|unsigned int|unsigned short|unsigned long|int8_t|int16_t|int32_t|int64_t|uint8_t|uint16_t|uint32_t|uint64_t|meosType|lwflags_t|lwflags)$/)) return 1;
+      if (ct === 'TimestampTz' || ct === 'DateADT') return Date.now();
+      if (ct === 'bool' || ct === '_Bool') return false;
+      if (ct.match(/char\s*\*/)) return 'POINT(4.36 50.84)';
+      return 0;
+    };
+
+    // Functions we can't safely call with random inputs. Aggregate
+    // transition/final/combine functions expect stateful inputs maintained
+    // across a scan and will loop or corrupt memory when fuzzed.
+    const SKIP_PATTERNS = [
+      /_transfn$/, /_finalfn$/, /_combinefn$/,
+    ];
+    const skip = new Set(opts.skip || [
+      // Heavy or destructive functions we shouldn't call blindly
+      'meos_initialize', 'meos_finalize', 'meos_finalize_timezone',
+      'meos_finalize_projsrs', 'meos_finalize_ways',
+      'meos_initialize_timezone', 'meos_initialize_error_handler',
+      'exit', 'abort', 'set_mem_size',
+    ]);
+    const skipByPattern = (name) => SKIP_PATTERNS.some(p => p.test(name));
+
+    const names = Object.keys(manifest).sort();
+    const limit = opts.limit || names.length;
+    const start = opts.start || 0;
+    const results = {
+      total: 0, ok: 0, threw: 0, nullPtr: 0, skipped: 0,
+      categories: {}, failures: [],
+    };
+    let count = 0;
+
+    for (let idx = start; idx < names.length && count < limit; idx++) {
+      const fn = names[idx];
+      count++;
+      results.total++;
+      if (skip.has(fn) || skipByPattern(fn) || typeof MEOS[fn] !== 'function') {
+        results.skipped++;
+        continue;
+      }
+      const def = manifest[fn];
+      const args = [];
+      let missingSample = false;
+      const consumed = def.out_param ? def.args.length - 1 : def.args.length;
+      for (let i = 0; i < consumed; i++) {
+        const t = def.args[i];
+        const ct = (def.arg_types_c[i] || '').trim();
+        if (t === 'pointer') {
+          const lst = samples[ct] || samples['Temporal *'] || anyTemporal;
+          if (!lst.length) { missingSample = true; break; }
+          args.push(lst[0].ptr);
+        } else if (t === 'string') {
+          args.push(scalar(ct));
+        } else if (t === 'boolean') {
+          args.push(false);
+        } else if (t === 'number') {
+          args.push(scalar(ct));
+        } else {
+          args.push(0);
+        }
+      }
+      if (missingSample) {
+        results.skipped++;
+        continue;
+      }
+      try {
+        const r = MEOS[fn](...args);
+        results.ok++;
+        // Categorise the productive-ness:
+        const isPtr = def.ret === 'pointer';
+        const retC = (def.ret_c || '').trim();
+        const isTime = retC === 'TimestampTz' || retC === 'DateADT';
+        const isProductive =
+          (typeof r === 'number' && (isPtr ? r > 0 : !Number.isNaN(r) && r !== 0)) ||
+          (typeof r === 'bigint' && r !== 0n) ||
+          (typeof r === 'string' && r.length > 0) ||
+          typeof r === 'boolean';
+        const head = fn.match(/^([a-z]+)_/);
+        const cat = head ? head[1] : 'misc';
+        if (!results.categories[cat]) results.categories[cat] = { ok: 0, threw: 0, empty: 0 };
+        if (isProductive) results.categories[cat].ok++;
+        else results.categories[cat].empty++;
+        if (!isProductive && results.failures.length < 40) {
+          let disp = String(r).slice(0, 40);
+          if (isTime && typeof r === 'bigint') {
+            try { const ms = Number(r / 1000n) + 946684800000; disp = new Date(ms).toISOString(); } catch {}
+          }
+          results.failures.push({ fn, why: 'empty', ret: disp });
+        }
+      } catch (e) {
+        results.threw++;
+        const head = fn.match(/^([a-z]+)_/);
+        const cat = head ? head[1] : 'misc';
+        if (!results.categories[cat]) results.categories[cat] = { ok: 0, threw: 0, empty: 0 };
+        results.categories[cat].threw++;
+        if (results.failures.length < 40) {
+          results.failures.push({ fn, why: 'threw', err: String(e).slice(0, 120) });
+        }
+      }
+    }
+    return results;
+  };
+
+  function fnHandlesOfType(type) {
+    const out = [];
+    for (const [name, h] of fnHandles.entries()) {
+      if (!type || h.type === type || type === 'pointer') out.push({ name, ...h });
+    }
+    return out;
+  }
+
+  // Group functions by their meaningful prefix. The MEOS naming convention
+  // is <namespace>_<verb>_<types>, so split on the first underscore.
+  function categoryOf(name) {
+    const m = name.match(/^([a-z]+)_/);
+    if (!m) return 'misc';
+    const head = m[1];
+    // Common prefixes worth surfacing as categories.
+    const groups = {
+      temporal: 'temporal',
+      tspatial: 'temporal',
+      tgeo: 'tpoint',
+      tpoint: 'tpoint',
+      tgeompoint: 'tpoint',
+      tgeogpoint: 'tpoint',
+      tgeometry: 'tgeometry',
+      tgeography: 'tgeometry',
+      tfloat: 'tnumber',
+      tint: 'tnumber',
+      tnumber: 'tnumber',
+      tbool: 'tnumber',
+      ttext: 'tnumber',
+      span: 'span',
+      spanset: 'span',
+      set: 'set',
+      stbox: 'box',
+      tbox: 'box',
+      distance: 'distance',
+      tdistance: 'distance',
+      nai: 'distance',
+      nad: 'distance',
+      shortestline: 'distance',
+      eintersects: 'predicate',
+      aintersects: 'predicate',
+      acontains: 'predicate',
+      etouches: 'predicate',
+      adisjoint: 'predicate',
+      always: 'predicate',
+      ever: 'predicate',
+      meos: 'meta',
+      geo: 'geo',
+      gserialized: 'geo',
+      lwgeom: 'geo',
+    };
+    return groups[head] || head;
+  }
+
+  fetch('./meos-api.json').then(r => r.json()).then(json => {
+    fnManifest = json;
+    fnNames = Object.keys(json).sort();
+    fnCount.textContent = fnNames.length.toLocaleString();
+    // Build category dropdown
+    const cats = {};
+    for (const n of fnNames) {
+      const c = categoryOf(n);
+      cats[c] = (cats[c] || 0) + 1;
+    }
+    const sortedCats = Object.entries(cats).sort((a, b) => b[1] - a[1]);
+    fnCategory.innerHTML = `<option value="">all (${fnNames.length})</option>` +
+      sortedCats.map(([c, n]) => `<option value="${c}">${c} (${n})</option>`).join('');
+    renderFnList();
+    selectFn('tgeompoint_in');
+  });
+
+  function renderFnList() {
+    if (!fnManifest) return;
+    const q = fnSearch.value.trim().toLowerCase();
+    const cat = fnCategory.value;
+    const filtered = fnNames.filter(n => {
+      if (cat && categoryOf(n) !== cat) return false;
+      if (q && !n.toLowerCase().includes(q)) return false;
+      return true;
+    });
+    if (filtered.length === 0) {
+      fnList.innerHTML = `<div style="padding:10px;color:var(--tick);text-align:center;font-style:italic;">no matches</div>`;
+      return;
+    }
+    // Limit DOM nodes for very large unfiltered lists
+    const cap = 400;
+    const shown = filtered.slice(0, cap);
+    fnList.innerHTML = shown.map(n => {
+      const def = fnManifest[n];
+      const ret = def.ret_c.replace(/\s*\*/, '*').slice(0, 14);
+      const active = n === fnCurrent ? ' active' : '';
+      return `<div class="row${active}" data-fn="${n}"><span class="name">${n}</span><span class="ret">${ret}</span></div>`;
+    }).join('') + (filtered.length > cap
+      ? `<div style="padding:6px 10px;color:var(--tick);font-style:italic;">… ${filtered.length - cap} more (refine search)</div>`
+      : '');
+    fnList.querySelectorAll('.row').forEach(row => {
+      row.addEventListener('click', () => selectFn(row.dataset.fn));
+    });
+  }
+
+  function selectFn(name) {
+    fnCurrent = name;
+    rebuildFnForm(name);
+    // Highlight in the list
+    fnList.querySelectorAll('.row').forEach(r => r.classList.toggle('active', r.dataset.fn === name));
+    // Auto-fill sample on selection so the user can just hit Execute
+    fillSample();
+  }
+
+  function renderFnForm(name) {
+    if (!fnManifest || !fnManifest[name]) {
+      fnForm.innerHTML = `<div style="color:var(--tick);font-style:italic;padding:6px;">pick a function from the list above</div>`;
+      return;
+    }
+    const def = fnManifest[name];
+    const args = def.args, names = def.arg_names, ctypes = def.arg_types_c;
+    const skipLast = !!def.out_param;
+    const nVisible = skipLast ? args.length - 1 : args.length;
+    const rows = [];
+    // Pretty C signature
+    const argsSig = (def.arg_types_c || []).join(', ');
+    rows.push(`<div class="signature">${def.ret_c} <b>${name}</b>(<span style="color:var(--tick)">${argsSig || 'void'}</span>)</div>`);
+    if (nVisible === 0) {
+      rows.push(`<div style="color:var(--tick);font-style:italic;font-size:10px;padding:4px 0;">no arguments — click ▸ Execute</div>`);
+    }
+    for (let i = 0; i < nVisible; i++) {
+      const t = args[i], n = names[i] || `arg${i}`, c = (ctypes[i] || '').trim();
+      if (t === 'pointer') {
+        // Drop-down of registered handles whose stored type matches.
+        const candidates = fnHandlesOfType(c);
+        const opts = candidates.length === 0
+          ? '<option value="">(no handles — load a dataset)</option>'
+          : candidates.map(h => `<option value="${h.name}">${h.name} · ${(h.label || '').slice(0, 24)}</option>`).join('');
+        rows.push(`<div class="row">
+          <div class="label"><div class="name">${n}</div><div>${c}</div></div>
+          <select class="fn-arg" data-i="${i}" data-t="pointer">${opts}</select>
+        </div>`);
+      } else if (t === 'boolean') {
+        rows.push(`<div class="row">
+          <div class="label"><div class="name">${n}</div><div>${c}</div></div>
+          <select class="fn-arg" data-i="${i}" data-t="boolean">
+            <option value="false">false</option>
+            <option value="true">true</option>
+          </select>
+        </div>`);
+      } else {
+        rows.push(`<div class="row">
+          <div class="label"><div class="name">${n}</div><div>${c}</div></div>
+          <input class="fn-arg" data-i="${i}" data-t="${t}" placeholder="${t}…" />
+        </div>`);
+      }
+    }
+    if (def.out_param) {
+      rows.push(`<div style="color:var(--ok);font-size:9px;margin-top:6px;font-style:italic;">→ output pointer auto-wrapped · returns <b>${def.out_param}</b> directly</div>`);
+    }
+    rows.push(`<div style="color:var(--tick);font-size:9px;margin-top:4px;font-style:italic;">return type · <b>${def.ret_c}</b></div>`);
+    fnForm.innerHTML = rows.join('');
+  }
+  // Backwards-compat alias used by other code paths.
+  const rebuildFnForm = renderFnForm;
+
+  fnSearch.addEventListener('input', () => renderFnList());
+  fnCategory.addEventListener('change', () => renderFnList());
+  fnSearch.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      // Pick the first visible row
+      const first = fnList.querySelector('.row');
+      if (first) selectFn(first.dataset.fn);
+    }
+  });
+
+  function fillSample() {
+    if (!fnCurrent || !fnManifest[fnCurrent]) return;
+    const def = fnManifest[fnCurrent];
+    const inputs = fnForm.querySelectorAll('input.fn-arg');
+    inputs.forEach(inp => {
+      const t = inp.dataset.t;
+      const i = parseInt(inp.dataset.i);
+      const c = def.arg_types_c[i] || '';
+      // Heuristic samples
+      if (t === 'string') {
+        if (fnCurrent.includes('mfjson')) inp.value = '{"type":"MovingPoint","coordinates":[[4.36,50.84],[4.5,50.88]],"datetimes":["2026-04-14T09:00:00+00","2026-04-14T09:30:00+00"],"lower_inc":true,"upper_inc":true,"interpolation":"Linear"}';
+        else if (fnCurrent.includes('hexwkb')) inp.value = '012A0000000300000000000000000000F03F0000000000000040';
+        else if (c.includes('Temporal') || fnCurrent.includes('tgeom') || fnCurrent.includes('tgeo')) inp.value = '[POINT(4.36 50.84)@2026-04-14 09:00:00, POINT(4.50 50.88)@2026-04-14 09:30:00]';
+        else inp.value = 'POINT(4.36 50.84)';
+      } else if (t === 'number') {
+        if (c.includes('TimestampTz') || c.includes('epoch')) inp.value = String(Date.now());
+        else if (c.includes('SRID') || fnCurrent.includes('srid')) inp.value = '4326';
+        else if (c.includes('precision') || c.includes('eps')) inp.value = '6';
+        else inp.value = '0';
+      } else if (t === 'boolean') {
+        inp.value = 'true';
+      } else if (t === 'pointer') {
+        // Pointer fields are now <select> elements populated from fnHandles
+        // — just leave the first option selected.
+        if (inp.tagName === 'SELECT' && inp.options.length > 0) {
+          inp.selectedIndex = 0;
+        }
+      }
+    });
+  }
+
+  fnSampleBtn.addEventListener('click', fillSample);
+
+  function execFn() {
+    if (!fnCurrent || !MEOS[fnCurrent]) {
+      fnResult.innerHTML = `<span style="color:var(--accent);">function not callable</span>`;
+      return;
+    }
+    const def = fnManifest[fnCurrent];
+    const inputs = fnForm.querySelectorAll('.fn-arg');
+    const args = [];
+    let missingPtr = false;
+    inputs.forEach(inp => {
+      const t = inp.dataset.t;
+      let v = inp.value;
+      if (t === 'number') v = parseFloat(v);
+      else if (t === 'boolean') v = (v === 'true');
+      else if (t === 'pointer') {
+        // value is a handle name in the registry
+        const h = fnHandles.get(v);
+        if (!h) { missingPtr = true; v = 0; }
+        else v = h.ptr;
+      }
+      args.push(v);
+    });
+    if (missingPtr) {
+      fnResult.innerHTML = `<div style="color:var(--accent);">no handle selected · load a dataset first or call a parser like <code>tgeompoint_in</code></div>`;
+      return;
+    }
+    let result;
+    const t0 = performance.now();
+    try { result = MEOS[fnCurrent](...args); }
+    catch (e) {
+      fnResult.innerHTML = `<div style="color:var(--accent);">throw: ${e.message}</div>`;
+      return;
+    }
+    const dt = performance.now() - t0;
+    renderFnResult(def, result, dt);
+  }
+
+  function escHTML(s) {
+    return String(s).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+  }
+
+  function renderFnResult(def, result, dt) {
+    const blocks = [];
+    blocks.push(`<div style="color:var(--tick);font-size:9px;margin-bottom:4px;">${dt.toFixed(2)}ms · returns <b style="color:var(--ink);">${def.ret_c}</b></div>`);
+    if (def.ret === 'pointer' && typeof result === 'number' && result > 0) {
+      // Save under a fresh name and render rich introspection if it's a Temporal*.
+      const stem = (def.ret_c || 'h').replace(/[^A-Za-z]/g, '').toLowerCase().slice(0, 8) || 'h';
+      const name = fnAddHandle(stem, result, def.ret_c);
+      const reuseHint = `<div style="color:var(--ok);font-size:10px;">→ stored as <b>${name}</b> — pick it from any pointer dropdown</div>`;
+      let intro = '';
+      if (def.ret_c.includes('Temporal')) {
+        try {
+          const desc = MEOS.meos_temporal_describe ? MEOS.meos_temporal_describe(result) : null;
+          if (desc) {
+            const o = JSON.parse(desc);
+            const startD = o.startMs ? new Date(o.startMs).toISOString().slice(0, 19) : '—';
+            const endD   = o.endMs   ? new Date(o.endMs  ).toISOString().slice(0, 19) : '—';
+            intro = `<div style="color:var(--ink);margin-top:4px;font-size:10px;line-height:1.5;">
+              <span style="color:var(--accent)">interp</span> ${o.interp} ·
+              <span style="color:var(--accent)">instants</span> ${o.instants} ·
+              <span style="color:var(--accent)">srid</span> ${o.srid}
+              <br><span style="color:var(--tick)">${startD} → ${endD}</span>
+            </div>`;
+          }
+        } catch {}
+      }
+      blocks.push(reuseHint + intro);
+    } else if (typeof result === 'string') {
+      const sample = result.length > 800 ? result.slice(0, 800) + '…' : result;
+      blocks.push(`<pre style="margin:4px 0;white-space:pre-wrap;font-size:10px;color:var(--ink);">${escHTML(sample)}</pre>`);
+    } else if (typeof result === 'boolean') {
+      blocks.push(`<div style="font-size:14px;font-style:italic;font-family:'Fraunces',serif;color:${result ? 'var(--ok)' : 'var(--accent)'};">${result}</div>`);
+    } else if (result === null || result === undefined) {
+      blocks.push(`<div style="color:var(--tick);font-style:italic;">null</div>`);
+    } else {
+      blocks.push(`<div style="font-family:'Fraunces',serif;font-style:italic;font-size:18px;color:var(--ink);">${result}</div>`);
+    }
+    fnResult.innerHTML = blocks.join('');
+    // Refresh the form so newly-stored handles appear in pointer dropdowns.
+    if (fnCurrent) renderFnForm(fnCurrent);
+  }
+  fnRunBtn.addEventListener('click', execFn);
+
+  fmtParseBtn.addEventListener('click', fmtParse);
+  fmtRtBtn.addEventListener('click', fmtRoundTrip);
+  fmtIn.addEventListener('keydown', e => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); fmtParse(); }
+  });
+
+  // Arch footer readout
+  try { $('#foot-arch').textContent = (navigator.userAgent.includes('Firefox') ? 'LP64' : 'LP64'); } catch {}
+</script>
+</body>
+</html>
